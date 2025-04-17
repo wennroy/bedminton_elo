@@ -89,30 +89,31 @@ class DoublesScheduler:
                 A[i, j] = 1
         return A
 
-    def solve(self, alpha_orig: float = 0.0) -> np.ndarray:
+    def solve(self, tau: float = 0.0) -> np.ndarray:
         """
-        alpha_orig: 原始正则参数 (二次项系数)
+        tau: 熵正则系数，越大则分布越平滑
         返回长度 M 的概率向量 p。
         """
-        # 构造等式约束 A_eq p = b_eq
-        b_players = np.full(self.n, 4/self.n)
+        b_players = np.full(self.n, 4 / self.n)
         A_eq = np.vstack([self.A, np.ones(self.M)])
         b_eq = np.concatenate([b_players, [1.0]])
 
-        if alpha_orig == 0.0:
+        if tau == 0.0:
             res = linprog(c=self.costs, A_eq=A_eq, b_eq=b_eq,
-                          bounds=[(0,1)]*self.M, method='highs')
+                          bounds=[(0, 1)] * self.M, method='highs')
             if not res.success:
                 raise RuntimeError("LP 失败: " + res.message)
             p = res.x
         else:
-            def obj(p): return self.costs.dot(p) + alpha_orig * p.dot(p)
-            constraints = [{'type':'eq', 'fun': lambda p, Arow=A_eq[i], be=b_eq[i]: Arow.dot(p)-be}
+            def obj(p):
+                return self.costs.dot(p) + tau * np.sum(p * np.log(p + 1e-12))
+
+            constraints = [{'type': 'eq', 'fun': lambda p, Arow=A_eq[i], be=b_eq[i]: Arow.dot(p) - be}
                            for i in range(A_eq.shape[0])]
-            x0 = np.full(self.M, 1/self.M)
-            res = minimize(obj, x0, bounds=[(0,1)]*self.M,
+            x0 = np.full(self.M, 1 / self.M)
+            res = minimize(obj, x0, bounds=[(0, 1)] * self.M,
                            constraints=constraints, method='SLSQP',
-                           options={'maxiter':1000, 'ftol':1e-9})
+                           options={'maxiter': 1000, 'ftol': 1e-9})
             if not res.success:
                 raise RuntimeError("QP 失败: " + res.message)
             p = res.x
@@ -124,44 +125,30 @@ class DoublesScheduler:
             raise ValueError("请先调用 solve() 获取概率分布")
         return random.choices(self.configs, weights=self.probs, k=self.m)
 
-    def visualize_alpha_effect(self, alpha_primes: List[float]):
-        c_bar = np.mean(self.costs)
-        M = self.M
+    def visualize_tau_effect(self, tau_list: List[float]):
+        import matplotlib.pyplot as plt
 
-        max_probs, entropies = [], []
-        alpha_orig_values = []
+        max_ps = []
+        entropies = []
 
-        for alpha_prime in alpha_primes:
-            alpha_orig = alpha_prime * c_bar * M
-            try:
-                p = self.solve(alpha_orig)
-                max_probs.append(np.max(p))
-                entropies.append(-np.sum(p * np.log(p + 1e-12)))
-                alpha_orig_values.append(alpha_orig)
-            except RuntimeError:
-                max_probs.append(np.nan)
-                entropies.append(np.nan)
-                alpha_orig_values.append(alpha_orig)
+        for tau in tau_list:
+            p = self.solve(tau)
+            max_ps.append(np.max(p))
+            entropies.append(-np.sum(p * np.log(p + 1e-12)))
 
         plt.figure(figsize=(12, 5))
 
         plt.subplot(1, 2, 1)
-        plt.plot(alpha_primes, max_probs, label="Max p_j")
-        plt.xscale("log")
-        plt.xlabel("alpha'")
-        plt.ylabel("Max probability")
-        plt.title("Max p_j vs alpha'")
-        plt.grid(True)
-        plt.legend()
+        plt.plot(tau_list, max_ps, marker='o')
+        plt.xlabel("tau")
+        plt.ylabel("max(p_j)")
+        plt.title("Maximum probability vs tau")
 
         plt.subplot(1, 2, 2)
-        plt.plot(alpha_primes, entropies, label="Entropy")
-        plt.xscale("log")
-        plt.xlabel("alpha'")
+        plt.plot(tau_list, entropies, marker='o')
+        plt.xlabel("tau")
         plt.ylabel("Entropy")
-        plt.title("Entropy vs alpha'")
-        plt.grid(True)
-        plt.legend()
+        plt.title("Entropy vs tau")
 
         plt.tight_layout()
         plt.show()
@@ -202,7 +189,9 @@ if __name__ == "__main__":
     print(f"归一化 alpha'={alpha_prime}, 对应 alpha_orig={alpha_orig:.4f}")
 
     # 求解并采样
-    p = sched.solve(alpha_orig)
+    tau = 0.0
+    print(f"当前使用 tau={tau}")
+    p = sched.solve(tau)
     print(f"分布 p_j 最大值: {np.max(p):.4f}, 熵: {-np.sum(p*np.log(p+1e-12)):.4f}")
     schedule = sched.sample_schedule()
 
@@ -210,7 +199,7 @@ if __name__ == "__main__":
     for idx, match in enumerate(schedule, 1):
         print(f"Game {idx}: Team1 {match[0]} vs Team2 {match[1]}")
 
-    alpha_grid = np.geomspace(1e-4, 1e2, 3000)  # 更细的对数间隔
-    sched.visualize_alpha_effect(alpha_grid)
+    tau_grid = np.linspace(0.0, 0.000000001, 20)
+    sched.visualize_tau_effect(tau_grid)
 
-    sched.visualize_player_counts(schedule)
+    # sched.visualize_player_counts(schedule)
