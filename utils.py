@@ -73,7 +73,6 @@ class DoublesScheduler:
                 raise RuntimeError("LP 失败: " + res.message)
             p = res.x
         else:
-            # 定义目标函数和梯度
             def obj(p):
                 cost_term = (1 - lambda_weight) * self.costs.dot(p)
                 q = 1.5
@@ -81,34 +80,12 @@ class DoublesScheduler:
                 reg_term = lambda_weight * tsallis
                 return cost_term + reg_term
 
-            def obj_jac(p):
-                grad_cost = (1 - lambda_weight) * self.costs
-                q = 1.5
-                grad_tsallis = (-lambda_weight) * q * (p ** (q - 1)) / (q - 1)
-                return grad_cost + grad_tsallis
-
-            # 定义带雅可比矩阵的约束
-            constraints = []
-            for i in range(A_eq.shape[0]):
-                Arow = A_eq[i, :].copy()
-                be = b_eq[i]
-                constraints.append({
-                    'type': 'eq',
-                    'fun': lambda p: Arow.dot(p) - be,
-                    'jac': lambda p: Arow
-                })
-
-            # 使用线性规划寻找可行初始点
-            res_lp = linprog(c=np.zeros(self.M), A_eq=A_eq, b_eq=b_eq,
-                             bounds=[(0, 1)] * self.M, method='highs')
-            if not res_lp.success:
-                raise RuntimeError("无法找到可行初始点: " + res_lp.message)
-            x0 = res_lp.x
-
-            res = minimize(obj, x0, method='SLSQP', jac=obj_jac,
-                           bounds=[(0, 1)] * self.M,
-                           constraints=constraints,
-                           options={'maxiter': 5000, 'ftol': 1e-12})
+            constraints = [{'type': 'eq', 'fun': lambda p, Arow=A_eq[i], be=b_eq[i]: Arow.dot(p) - be}
+                           for i in range(A_eq.shape[0])]
+            x0 = np.full(self.M, 1 / self.M)
+            res = minimize(obj, x0, bounds=[(0, 1)] * self.M,
+                           constraints=constraints, method='SLSQP',
+                           options={'maxiter': 1000, 'ftol': 1e-9})
             if not res.success:
                 raise RuntimeError("QP 失败: " + res.message)
             p = res.x
@@ -128,21 +105,13 @@ class DoublesScheduler:
 if __name__ == "__main__":
     player_elo = {'1': -0.926, '2': -0.799, '3': 1.641,
                   '4': 0.078, '5': 0.953, '6': -0.946}
-    total_games = 20
+    player_elo = {'1': -0.926, '2': -0.799, '3': 1.641,
+                  '4': 0.078, '5': 0.953, '6': -0.946, '7': 0.3, '8': -0.38, '9': 0.358}
+    player_elo = standardized_elo(player_elo)
+    total_games = 12
 
-    lambdas = np.linspace(0.8, 1, 1000)
+    lambdas = np.linspace(0, 1, 100)
     max_ps, entropies, costs = [], [], []
-
-    for lam in lambdas:
-        sched = DoublesScheduler(player_elo, total_games)
-        p = sched.solve(lambda_weight=lam)
-        max_ps.append(np.max(p))
-        entropies.append(-np.sum(p * np.log(p + 1e-12)))
-        costs.append(sched.costs.dot(p))
-
-    print("lambda\tmax_p\tentropy\tcost")
-    for i in range(len(lambdas)):
-        print(f"{lambdas[i]:.2f}\t{max_ps[i]:.4f}\t{entropies[i]:.4f}\t{costs[i]:.4f}")
 
     # 打印一个 lambda=0.3 的结果
     print("\n最终对局安排 (lambda=0.3):")
@@ -154,6 +123,16 @@ if __name__ == "__main__":
 
     import matplotlib.pyplot as plt
 
+    for lam in lambdas:
+        sched = DoublesScheduler(player_elo, total_games)
+        p = sched.solve(lambda_weight=lam)
+        max_ps.append(np.max(p))
+        entropies.append(-np.sum(p * np.log(p + 1e-12)))
+        costs.append(sched.costs.dot(p))
+
+    print("lambda\tmax_p\tentropy\tcost")
+    for i in range(len(lambdas)):
+        print(f"{lambdas[i]:.2f}\t{max_ps[i]:.4f}\t{entropies[i]:.4f}\t{costs[i]:.4f}")
     # 绘图：max_p, entropy, cost vs lambda
     fig, axs = plt.subplots(3, 1, figsize=(8, 10), sharex=True)
 
