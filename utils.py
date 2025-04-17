@@ -106,7 +106,9 @@ class DoublesScheduler:
             p = res.x
         else:
             def obj(p):
-                return self.costs.dot(p) + tau * np.sum(p * np.log(p + 1e-12))
+                q = 1.5  # 可以调节
+                tsallis = (1 - np.sum(p ** q)) / (q - 1)
+                return self.costs.dot(p) + tau * tsallis
 
             constraints = [{'type': 'eq', 'fun': lambda p, Arow=A_eq[i], be=b_eq[i]: Arow.dot(p) - be}
                            for i in range(A_eq.shape[0])]
@@ -199,7 +201,7 @@ if __name__ == "__main__":
     for idx, match in enumerate(schedule, 1):
         print(f"Game {idx}: Team1 {match[0]} vs Team2 {match[1]}")
 
-    tau_grid = np.linspace(0.0, 0.000000001, 20)
+    tau_grid = np.linspace(0.0, 0.1, 100)
     sched.visualize_tau_effect(tau_grid)
 
     # sched.visualize_player_counts(schedule)
