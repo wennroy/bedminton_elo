@@ -8,6 +8,9 @@ from datetime import datetime
 import plotly.express as px
 import math
 
+from utils import generate_double_configurations, standardized_elo, DoublesScheduler
+
+
 # 参数配置
 INITIAL_RATING = 1000
 K_SINGLES = 32
@@ -352,9 +355,12 @@ def match_scheduler_page():
     with st.form("match_params"):
         st.subheader("比赛参数设置")
         total_matches = st.number_input("总比赛场次", min_value=1, value=4)
-        alpha = st.slider("随机比赛比例", 0.0, 1.0, 0.2)
+        # alpha = st.slider("随机比赛比例", 0.0, 1.0, 0.2)
+        alpha = 0
         selected_players = st.multiselect("选择参赛选手", list(users.keys()))
         seed = st.number_input("随机种子（可选）", min_value=0, format="%d", value=None)
+        temperature = st.number_input("温度：温度越低平衡性越好", min_value=0.0, max_value=1.0, step=0.000001, value=0.5,
+                                      format="%0.6f")
         generate_btn = st.form_submit_button("生成比赛")
 
     if generate_btn:
@@ -384,7 +390,7 @@ def match_scheduler_page():
         # 初始化参赛次数计数器
         player_ids = [p['id'] for p in players]
         play_count = {pid: 0 for pid in player_ids}
-        players_dict = {str(player["id"]): player["elo"] for player in players}
+        players_dict = {player["id"]: player["elo"] for player in players}
         # st.write(players_dict)
 
         # 计算各类型比赛数量
@@ -393,47 +399,31 @@ def match_scheduler_page():
 
         # 生成非随机比赛（改进后的算法）
         non_random_matches = []
-        for _ in range(non_random_num):
-            # 选择参赛次数最少的4个选手（允许重复选择）
-            candidates = sorted(player_ids, key=lambda x: play_count[x])[:4]
+        player_elo = standardized_elo(players_dict)
 
-            # 生成所有可能的组合
-            possible_teams = []
-            for team_a in itertools.combinations(candidates, 2):
-                team_b = tuple(p for p in candidates if p not in team_a)
-                if len(team_b) != 2:
-                    continue
+        sched = DoublesScheduler(player_elo, non_random_num)
+        # 计算归一化常量
+        c_bar = np.mean(sched.costs)
+        M = sched.M
+        # 设定归一化参数 alpha' = 0.1，映射到原始 alpha
+        alpha_prime = 5000
+        alpha_orig = alpha_prime * c_bar * M
 
-                # 计算队伍ELO差异
-                # st.write(players_dict)
-                team_a_avg = (players_dict[str(team_a[0])] + players_dict[str(team_a[1])]) / 2
-                team_b_avg = (players_dict[str(team_b[0])] + players_dict[str(team_b[1])]) / 2
-                elo_diff = abs(team_a_avg - team_b_avg)
+        # print(f"归一化 alpha'={alpha_prime}, 对应 alpha_orig={alpha_orig:.4f}")
 
-                # 计算公平性得分（ELO差异越小越好，参赛次数越少越好）
-                fairness_score = (
-                        elo_diff * 0.7 +  # ELO差异权重
-                        (play_count[team_a[0]] + play_count[team_a[1]] +
-                         play_count[team_b[0]] + play_count[team_b[1]]) * 0.3  # 参赛次数权重
-                )
+        # 求解并采样
+        p = sched.solve(alpha_orig)
+        st.write(alpha_orig)
+        st.write(f"分布 p_j 最大值: {np.max(p):.4f}, 熵: {-np.sum(p * np.log(p + 1e-12)):.4f}")
+        schedule = sched.sample_schedule()
 
-                possible_teams.append((fairness_score, sorted([sorted(team_a), sorted(team_b)])))
-
-                if not possible_teams:
-                    st.warning("无法生成非随机比赛，选手不足")
-                break
-
-            # 选择最公平的组合
-            st.write(f"Possible_Teams: ")
-            st.write(possible_teams)
-            best_match = min(possible_teams, key=lambda x: x[0])[1]
-            st.write("Best:")
-            st.write(best_match)
-            non_random_matches.append(best_match)
-
+        for idx, match in enumerate(schedule, 1):
             # 更新参赛次数
-            for pid in best_match[0] + best_match[1]:
-                play_count[pid] += 1
+            play_count[match[0][0]] += 1
+            play_count[match[0][1]] += 1
+            play_count[match[1][0]] += 1
+            play_count[match[1][1]] += 1
+            non_random_matches.append((match[0], match[1]))
 
         # 生成随机比赛（改进后的算法）
         random_matches = []
@@ -483,7 +473,7 @@ def match_scheduler_page():
             count_data.append({
                 "选手": id_to_name[pid],
                 "参赛次数": cnt,
-                "ELO": players_dict[str(pid)]
+                "ELO": players_dict[pid]
             })
         df_counts = pd.DataFrame(count_data).sort_values("参赛次数")
         st.dataframe(df_counts, use_container_width=True)
@@ -536,15 +526,13 @@ def match_scheduler_page():
             if st.button("💾 保存所有已提交比赛到主记录"):
                 conn = sqlite3.connect('badminton.db')
                 submitted = pd.read_sql("SELECT * FROM pending_matches WHERE submitted=1", conn)
-                players = pd.read_sql("SELECT id, name FROM users", conn)
-                players_id_dict = {str(player["id"]): player["name"] for _, player in players.iterrows()}
                 for _, match in submitted.iterrows():
                     add_match(
                         match_type="双打",
-                        a1=players_id_dict[str(match['player_a1'])],
-                        a2=players_id_dict[str(match['player_a2'])],
-                        b1=players_id_dict[str(match['player_b1'])],
-                        b2=players_id_dict[str(match['player_b2'])],
+                        a1=id_to_name[match['player_a1']],
+                        a2=id_to_name[match['player_a2']],
+                        b1=id_to_name[match['player_b1']],
+                        b2=id_to_name[match['player_b2']],
                         score_a=match['score_a'],
                         score_b=match['score_b'],
                         date=datetime.now().strftime("%Y-%m-%d")
