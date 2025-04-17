@@ -1,37 +1,11 @@
-"""
-DoublesScheduler 模块：
-
-需求总结：
-1. 给定 n 名选手及其标准化后的 Elo 分数，安排 m 场双打比赛。
-2. 目标：保证每人上场期望为 4m/n，同时最大程度平衡队伍实力差异。
-3. 通过决策变量 p_j 表示第 j 种配置出现的概率：
-   - 线性项：最小化 \sum_j c_j p_j，其中 c_j 为该配置的队伍 Elo 差成本。
-   - 二次正则：加入 \alpha_{orig} \sum_j p_j^2，防止某些配置过度集中。
-4. 为便于选取 \alpha 在 [0,1] 范围，可归一化：
-   \[ \alpha' = \frac{\alpha_{orig}}{\bar c \, M}, \quad \alpha_{orig} = \alpha' (\bar c \, M). \]
-   其中 \bar c = \frac1M\sum_j c_j，M 为配置总数。
-
-模型数学形式：
-\begin{aligned}
-&\min_{p\in\mathbb{R}^M} \sum_j c_j p_j + \alpha_{orig} \sum_j p_j^2,\\
-&\text{s.t. } \sum_j p_j = 1, \quad \sum_j A_{i,j} p_j = \frac{4}{n},\ i=1,\dots,n, \quad p_j\ge0.
-\end{aligned}
-"""
-
 import itertools
 import random
 from typing import Dict, List, Tuple, Optional
 import numpy as np
 from scipy.optimize import linprog, minimize
-import matplotlib.pyplot as plt
-from collections import Counter
 
 
 def generate_double_configurations(players: List[str]) -> List[Tuple[Tuple[str, str], Tuple[str, str]]]:
-    """
-    枚举所有 4 人双打配置，并分成两个队。
-    返回列表：[((p1,p2),(p3,p4)), ...]
-    """
     configs = []
     for quartet in itertools.combinations(players, 4):
         a, b, c, d = quartet
@@ -58,13 +32,11 @@ def standardized_elo(players_dict: Dict[str, float]) -> Dict[str, float]:
 class DoublesScheduler:
     def __init__(self,
                  player_elo: Dict[str, float],
-                 total_games: int,
-                 use_squared: bool = False):
+                 total_games: int):
         self.player_elo = player_elo
         self.players = list(player_elo.keys())
         self.n = len(self.players)
         self.m = total_games
-        self.use_squared = use_squared
 
         self.configs = generate_double_configurations(self.players)
         self.M = len(self.configs)
@@ -78,7 +50,7 @@ class DoublesScheduler:
             e1 = sum(self.player_elo[p] for p in team1)
             e2 = sum(self.player_elo[p] for p in team2)
             diff = e1 - e2
-            costs.append(diff*diff if self.use_squared else abs(diff))
+            costs.append(abs(diff))
         return costs
 
     def _build_incidence(self) -> np.ndarray:
@@ -89,16 +61,12 @@ class DoublesScheduler:
                 A[i, j] = 1
         return A
 
-    def solve(self, tau: float = 0.0) -> np.ndarray:
-        """
-        tau: 熵正则系数，越大则分布越平滑
-        返回长度 M 的概率向量 p。
-        """
+    def solve(self, lambda_weight: float = 0.0) -> np.ndarray:
         b_players = np.full(self.n, 4 / self.n)
         A_eq = np.vstack([self.A, np.ones(self.M)])
         b_eq = np.concatenate([b_players, [1.0]])
 
-        if tau == 0.0:
+        if lambda_weight == 0.0:
             res = linprog(c=self.costs, A_eq=A_eq, b_eq=b_eq,
                           bounds=[(0, 1)] * self.M, method='highs')
             if not res.success:
@@ -106,9 +74,9 @@ class DoublesScheduler:
             p = res.x
         else:
             def obj(p):
-                q = 1.5  # 可以调节
-                tsallis = (1 - np.sum(p ** q)) / (q - 1)
-                return self.costs.dot(p) + tau * tsallis
+                cost_term = (1 - lambda_weight) * self.costs.dot(p)
+                reg_term = lambda_weight * np.sum(p ** 2)
+                return cost_term + reg_term
 
             constraints = [{'type': 'eq', 'fun': lambda p, Arow=A_eq[i], be=b_eq[i]: Arow.dot(p) - be}
                            for i in range(A_eq.shape[0])]
@@ -119,6 +87,7 @@ class DoublesScheduler:
             if not res.success:
                 raise RuntimeError("QP 失败: " + res.message)
             p = res.x
+
         self.probs = p
         return p
 
@@ -127,81 +96,52 @@ class DoublesScheduler:
             raise ValueError("请先调用 solve() 获取概率分布")
         return random.choices(self.configs, weights=self.probs, k=self.m)
 
-    def visualize_tau_effect(self, tau_list: List[float]):
-        import matplotlib.pyplot as plt
 
-        max_ps = []
-        entropies = []
-
-        for tau in tau_list:
-            p = self.solve(tau)
-            max_ps.append(np.max(p))
-            entropies.append(-np.sum(p * np.log(p + 1e-12)))
-
-        plt.figure(figsize=(12, 5))
-
-        plt.subplot(1, 2, 1)
-        plt.plot(tau_list, max_ps, marker='o')
-        plt.xlabel("tau")
-        plt.ylabel("max(p_j)")
-        plt.title("Maximum probability vs tau")
-
-        plt.subplot(1, 2, 2)
-        plt.plot(tau_list, entropies, marker='o')
-        plt.xlabel("tau")
-        plt.ylabel("Entropy")
-        plt.title("Entropy vs tau")
-
-        plt.tight_layout()
-        plt.show()
-
-    def visualize_player_counts(self, schedule: List[Tuple[Tuple[str, str], Tuple[str, str]]]):
-        count = Counter()
-        for team1, team2 in schedule:
-            for p in team1 + team2:
-                count[p] += 1
-
-        ordered_players = sorted(self.players)
-        counts = [count[p] for p in ordered_players]
-
-        plt.figure(figsize=(8, 4))
-        plt.bar(ordered_players, counts, color='skyblue')
-        plt.axhline(y=4 * self.m / self.n, color='red', linestyle='--', label='Theoretical Expectation')
-        plt.title("Player Participation Count")
-        plt.xlabel("Player")
-        plt.ylabel("Number of Games Played")
-        plt.legend()
-        plt.tight_layout()
-        plt.show()
-
-# --- 测试与示例 ---
+# --- 测试与可视分析 ---
 if __name__ == "__main__":
     player_elo = {'1': -0.926, '2': -0.799, '3': 1.641,
                   '4': 0.078, '5': 0.953, '6': -0.946}
     total_games = 20
 
-    sched = DoublesScheduler(player_elo, total_games)
-    # 计算归一化常量
-    c_bar = np.mean(sched.costs)
-    M = sched.M
-    # 设定归一化参数 alpha' = 0.1，映射到原始 alpha
-    alpha_prime = 0.1
-    alpha_orig = alpha_prime * c_bar * M
+    lambdas = np.linspace(0, 1, 1000)
+    max_ps, entropies, costs = [], [], []
 
-    print(f"归一化 alpha'={alpha_prime}, 对应 alpha_orig={alpha_orig:.4f}")
+    for lam in lambdas:
+        sched = DoublesScheduler(player_elo, total_games)
+        p = sched.solve(lambda_weight=lam)
+        max_ps.append(np.max(p))
+        entropies.append(-np.sum(p * np.log(p + 1e-12)))
+        costs.append(sched.costs.dot(p))
 
-    # 求解并采样
-    tau = 0.0
-    print(f"当前使用 tau={tau}")
-    p = sched.solve(tau)
-    print(f"分布 p_j 最大值: {np.max(p):.4f}, 熵: {-np.sum(p*np.log(p+1e-12)):.4f}")
-    schedule = sched.sample_schedule()
+    print("lambda\tmax_p\tentropy\tcost")
+    for i in range(len(lambdas)):
+        print(f"{lambdas[i]:.2f}\t{max_ps[i]:.4f}\t{entropies[i]:.4f}\t{costs[i]:.4f}")
 
-    print("生成的对局安排:")
+    # 打印一个 lambda=0.3 的结果
+    print("\n最终对局安排 (lambda=0.3):")
+    final_sched = DoublesScheduler(player_elo, total_games)
+    final_sched.solve(lambda_weight=0.3)
+    schedule = final_sched.sample_schedule()
     for idx, match in enumerate(schedule, 1):
         print(f"Game {idx}: Team1 {match[0]} vs Team2 {match[1]}")
 
-    tau_grid = np.linspace(0.0, 0.1, 100)
-    sched.visualize_tau_effect(tau_grid)
+    import matplotlib.pyplot as plt
 
-    # sched.visualize_player_counts(schedule)
+    # 绘图：max_p, entropy, cost vs lambda
+    fig, axs = plt.subplots(3, 1, figsize=(8, 10), sharex=True)
+
+    axs[0].plot(lambdas, max_ps, marker='o', color='blue')
+    axs[0].set_ylabel("max(p_j)")
+    axs[0].set_title("max_p vs lambda")
+
+    axs[1].plot(lambdas, entropies, marker='o', color='green')
+    axs[1].set_ylabel("Entropy")
+    axs[1].set_title("Entropy vs lambda")
+
+    axs[2].plot(lambdas, costs, marker='o', color='red')
+    axs[2].set_ylabel("Elo")
+    axs[2].set_title("ELO vs lambda")
+    axs[2].set_xlabel("lambda")
+
+    plt.tight_layout()
+    plt.show()
