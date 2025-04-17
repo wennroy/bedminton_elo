@@ -73,17 +73,42 @@ class DoublesScheduler:
                 raise RuntimeError("LP 失败: " + res.message)
             p = res.x
         else:
+            # 定义目标函数和梯度
             def obj(p):
                 cost_term = (1 - lambda_weight) * self.costs.dot(p)
-                reg_term = lambda_weight * np.sum(p ** 2)
+                q = 1.5
+                tsallis = (1 - np.sum(p ** q)) / (q - 1)
+                reg_term = lambda_weight * tsallis
                 return cost_term + reg_term
 
-            constraints = [{'type': 'eq', 'fun': lambda p, Arow=A_eq[i], be=b_eq[i]: Arow.dot(p) - be}
-                           for i in range(A_eq.shape[0])]
-            x0 = np.full(self.M, 1 / self.M)
-            res = minimize(obj, x0, bounds=[(0, 1)] * self.M,
-                           constraints=constraints, method='SLSQP',
-                           options={'maxiter': 1000, 'ftol': 1e-9})
+            def obj_jac(p):
+                grad_cost = (1 - lambda_weight) * self.costs
+                q = 1.5
+                grad_tsallis = (-lambda_weight) * q * (p ** (q - 1)) / (q - 1)
+                return grad_cost + grad_tsallis
+
+            # 定义带雅可比矩阵的约束
+            constraints = []
+            for i in range(A_eq.shape[0]):
+                Arow = A_eq[i, :].copy()
+                be = b_eq[i]
+                constraints.append({
+                    'type': 'eq',
+                    'fun': lambda p: Arow.dot(p) - be,
+                    'jac': lambda p: Arow
+                })
+
+            # 使用线性规划寻找可行初始点
+            res_lp = linprog(c=np.zeros(self.M), A_eq=A_eq, b_eq=b_eq,
+                             bounds=[(0, 1)] * self.M, method='highs')
+            if not res_lp.success:
+                raise RuntimeError("无法找到可行初始点: " + res_lp.message)
+            x0 = res_lp.x
+
+            res = minimize(obj, x0, method='SLSQP', jac=obj_jac,
+                           bounds=[(0, 1)] * self.M,
+                           constraints=constraints,
+                           options={'maxiter': 5000, 'ftol': 1e-12})
             if not res.success:
                 raise RuntimeError("QP 失败: " + res.message)
             p = res.x
@@ -91,9 +116,11 @@ class DoublesScheduler:
         self.probs = p
         return p
 
-    def sample_schedule(self) -> List[Tuple[Tuple[str, str], Tuple[str, str]]]:
+    def sample_schedule(self, seed: Optional[int] = None) -> List[Tuple[Tuple[str, str], Tuple[str, str]]]:
         if self.probs is None:
             raise ValueError("请先调用 solve() 获取概率分布")
+        if seed is not None:
+            random.seed(seed)
         return random.choices(self.configs, weights=self.probs, k=self.m)
 
 
@@ -103,7 +130,7 @@ if __name__ == "__main__":
                   '4': 0.078, '5': 0.953, '6': -0.946}
     total_games = 20
 
-    lambdas = np.linspace(0, 1, 1000)
+    lambdas = np.linspace(0.8, 1, 1000)
     max_ps, entropies, costs = [], [], []
 
     for lam in lambdas:
