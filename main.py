@@ -406,15 +406,15 @@ def elo_page():
 
         # 获取最终 TrueSkill 得分（存储在 players_trueskill 表中），并按 mu 排序
         final_ts_df = pd.read_sql('''
-            SELECT u.name, round(p.mu, 1) as trueskill  
+            SELECT u.name, round(p.mu, 1) as mean, round(p.sigma, 2) as std_deviation
             FROM players_trueskill p
             JOIN users u ON p.user_id = u.id
             ORDER BY p.mu DESC
         ''', conn)
         conn.close()
-
+        # st.write(final_ts_df)
         # 显示最终 TrueSkill 得分表
-        st.dataframe(final_ts_df, use_container_width=True, column_order=["name", "trueskill"], hide_index=True)
+        st.dataframe(final_ts_df, use_container_width=True, column_order=["name", "mean", "std_deviation"], hide_index=True)
 
         # 合并用户姓名
         ts_history_df["Date"] = pd.to_datetime(ts_history_df["Date"])
