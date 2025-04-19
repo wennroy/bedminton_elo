@@ -426,7 +426,7 @@ def predict_trueskill(teamA_ids, teamB_ids, players_df = None):
 # Elo页面
 def elo_page():
     select_rating_system = st.selectbox(label="比赛得分排名系统: ",
-                                        options=["ELO (Based on score)", "TrueSkill (Based on distribution)"])
+                                        options=["TrueSkill (Based on distribution)", "ELO (Based on score)"])
     if select_rating_system.startswith("ELO"):
         st.header("🏅 Elo排名")
         st.markdown("起始分1000分，默认**K factor**: 32 (双打为16)。")
@@ -559,14 +559,14 @@ def elo_page():
         if select_rating_system.startswith("ELO"):
             # Elo 预测
             elo_teamA_prob, elo_teamB_prob = predict_elo(teamA_ids, teamB_ids, players_df)
-            st.write(f"队伍 A 胜率：{elo_teamA_prob * 100:.1f}%")
-            st.write(f"队伍 B 胜率：{elo_teamB_prob * 100:.1f}%")
+            st.write(f"队伍 A 预测胜率 (基于elo算法)：{elo_teamA_prob * 100:.1f}%")
+            st.write(f"队伍 B 预测胜率 (基于elo算法)：{elo_teamB_prob * 100:.1f}%")
         elif select_rating_system.startswith("TrueSkill"):
             # TrueSkill 预测
             ts_outcome = predict_trueskill(teamA_ids, teamB_ids, players_df)
-            st.write(f"队伍 A 获胜概率：{ts_outcome['win'] * 100:.1f}%")
+            st.write(f"队伍 A 预测胜率 (基于TrueSkill算法)：{ts_outcome['win'] * 100:.1f}%")
             # st.write(f"平局概率：{ts_outcome['draw'] * 100:.1f}%")
-            st.write(f"队伍 B 获胜概率：{ts_outcome['loss'] * 100:.1f}%")
+            st.write(f"队伍 B 预测胜率 (基于TrueSkill算法)：{ts_outcome['loss'] * 100:.1f}%")
 
 
 # 管理页面
