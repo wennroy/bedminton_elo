@@ -355,6 +355,63 @@ def calculate_trueskill():
     ts_df = pd.DataFrame(ts_date_player_list)
     return ts_df
 
+@st.cache_data
+def load_players_data():
+    conn = sqlite3.connect('badminton.db')
+    users_df = pd.read_sql("SELECT id, name FROM users", conn)
+    elo_df = pd.read_sql("SELECT user_id, elo FROM players", conn)
+    ts_df = pd.read_sql("SELECT user_id, mu, sigma FROM players_trueskill", conn)
+    conn.close()
+    # 合并信息，方便后续选项展示
+    players_df = users_df.merge(elo_df, left_on="id", right_on="user_id", how="left")
+    players_df = players_df.merge(ts_df, on="user_id", how="left")
+    # 若某些字段缺失则赋默认值（Elo 初始1000, TrueSkill默认 mu=25, sigma=8.33）
+    players_df["elo"] = players_df["elo"].fillna(1000)
+    players_df["mu"] = players_df["mu"].fillna(25)
+    players_df["sigma"] = players_df["sigma"].fillna(8.333)
+    return players_df
+
+
+def predict_elo(teamA_ids, teamB_ids, players_df = load_players_data()):
+    """
+    根据 Elo 评分计算双打比赛预测胜率。双方队伍 Elo 为队内选手 Elo 平均值。
+    返回:
+       teamA_win_prob, teamB_win_prob
+    """
+    # 从 players_df 中查找 Elo 分数
+    teamA_elo = players_df[players_df["id"].isin(teamA_ids)]["elo"].mean()
+    teamB_elo = players_df[players_df["id"].isin(teamB_ids)]["elo"].mean()
+    # Elo 预测公式（1v1 也适用于取平均值的双打）
+    teamA_win_prob = 1 / (1 + 10 ** ((teamB_elo - teamA_elo) / 400))
+    teamB_win_prob = 1 - teamA_win_prob
+    return teamA_win_prob, teamB_win_prob
+
+
+def predict_trueskill(teamA_ids, teamB_ids, players_df = load_players_data()):
+    """
+    根据 TrueSkill 预测双打结果，构造双方 Player 对象（使用 mu、sigma）。
+    调用 TrueSkill 类中的 predict_team_outcome 方法计算胜率等。
+    返回一个字典，包含 'win', 'draw', 'loss' 其中：
+         win: 队伍 A 获胜概率
+         loss: 队伍 A 失败（队伍 B 获胜）概率
+         draw: 平局概率（此处设置为 0）
+    """
+    # 创建 TrueSkill 工具实例，设置 draw_probability 为 0
+    ts_util = TrueSkill(draw_probability=0.0)
+
+    def make_player(user_id):
+        row = players_df[players_df["id"] == user_id].iloc[0]
+        # 构造 Player 对象，参数来自数据库；可调整初始化值的尺度
+        return Player(mu=row["mu"], sigma=row["sigma"])
+
+    teamA = [make_player(pid) for pid in teamA_ids]
+    teamB = [make_player(pid) for pid in teamB_ids]
+
+    # 利用 ts_util 对团队进行预测
+    outcome = ts_util.predict_team_outcome(teamA, teamB)
+    # 返回的 outcome 包含 'win', 'draw', 'loss'
+    return outcome
+
 
 # Elo页面
 def elo_page():
@@ -459,6 +516,49 @@ def elo_page():
         )
         st.markdown("#### Trueskill 趋势图")
         st.plotly_chart(fig)
+
+    st.markdown("---")
+
+    players_df = load_players_data()
+
+    # 提供双方队伍的选择
+    st.markdown("### 请选择双打双方的选手")
+    # 生成选项列表，格式："name (id)"；确保选手不会重复选择
+    player_options = players_df.sort_values("name").apply(lambda row: f'{row["name"]} (ID: {row["id"]})',
+                                                          axis=1).tolist()
+    player2id = {option: row["id"] for option, row in zip(player_options, players_df.to_dict("records"))}
+
+    st.markdown("#### 队伍 A")
+    teamA_player1 = st.selectbox("队伍 A – 选手 1", player_options, key="A1")
+    teamA_player2 = st.selectbox("队伍 A – 选手 2", player_options, key="A2")
+
+    st.markdown("#### 队伍 B")
+    teamB_player1 = st.selectbox("队伍 B – 选手 1", player_options, key="B1")
+    teamB_player2 = st.selectbox("队伍 B – 选手 2", player_options, key="B2")
+
+    # 简单检查：若同一个选手出现在两个队中，可给出警告
+    selected_ids = [player2id[teamA_player1], player2id[teamA_player2],
+                    player2id[teamB_player1], player2id[teamB_player2]]
+    if len(set(selected_ids)) < 4:
+        st.warning("请确保四位选手均不重复！")
+
+    if st.button("Predict"):
+        # 队伍的选手 ID 列表
+        teamA_ids = [player2id[teamA_player1], player2id[teamA_player2]]
+        teamB_ids = [player2id[teamB_player1], player2id[teamB_player2]]
+
+        if select_rating_system.startswith("ELO"):
+            # Elo 预测
+            elo_teamA_prob, elo_teamB_prob = predict_elo(teamA_ids, teamB_ids)
+            st.write(f"队伍 A 胜率：{elo_teamA_prob * 100:.1f}%")
+            st.write(f"队伍 B 胜率：{elo_teamB_prob * 100:.1f}%")
+        elif select_rating_system.startswith("TrueSkill"):
+            # TrueSkill 预测
+            ts_outcome = predict_trueskill(teamA_ids, teamB_ids)
+            st.write(f"队伍 A 获胜概率：{ts_outcome['win'] * 100:.1f}%")
+            # st.write(f"平局概率：{ts_outcome['draw'] * 100:.1f}%")
+            st.write(f"队伍 B 获胜概率：{ts_outcome['loss'] * 100:.1f}%")
+
 
 # 管理页面
 def manage_page():
