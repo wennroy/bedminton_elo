@@ -534,8 +534,7 @@ def elo_page():
     # 提供双方队伍的选择
     st.markdown("### 请选择双打双方的选手")
     # 生成选项列表，格式："name (id)"；确保选手不会重复选择
-    player_options = players_df.sort_values("name").apply(lambda row: f'{row["name"]} (ID: {row["id"]})',
-                                                          axis=1).tolist()
+    player_options = players_df.apply(lambda row: f'{row["name"]}', axis=1).tolist()
     player2id = {option: row["id"] for option, row in zip(player_options, players_df.to_dict("records"))}
 
     st.markdown("#### 队伍 A")
