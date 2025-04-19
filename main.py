@@ -429,7 +429,7 @@ def elo_page():
             n = len(unique_names)
             if n > 1:
                 # 间隔 = 总时长 2 小时除以 (n-1)
-                spacing = pd.Timedelta(hours=20) / (n - 1)
+                spacing = pd.Timedelta(hours=48) / (n - 1)
             else:
                 spacing = pd.Timedelta(0)
 
