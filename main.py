@@ -6,7 +6,9 @@ import numpy as np
 import random
 from datetime import datetime
 import plotly.express as px
+import plotly.graph_objects as go
 import math
+from trueskill_utils import TrueSkill, Player
 
 from utils import generate_double_configurations, standardized_elo, DoublesScheduler
 
@@ -245,35 +247,218 @@ def calculate_elo():
     elo_df = pd.DataFrame(elo_date_player_list)
     return elo_df
 
-# Elo页面
-def elo_page():
-    st.header("🏅 Elo排名")
-    st.markdown("起始分1000分，默认**K factor**: 32 (双打为16)。")
 
-    elo_df = calculate_elo()
-
+def calculate_trueskill():
     conn = sqlite3.connect('badminton.db')
-    user_df = pd.read_sql("""
-        SELECT id, name
-        from users
-    """, conn)
-    elo_df = elo_df.merge(user_df, "left", on=["id"])
-    df = pd.read_sql('''
-        SELECT u.name, round(p.elo, 1) as elo 
-        FROM players p
-        JOIN users u ON p.user_id = u.id
-        ORDER BY p.elo DESC
-    ''', conn)
+
+    # 获取所有比赛记录，假设表 matches 字段顺序为：
+    # id, match_type, a1, a2, b1, b2, score_a, score_b, date
+    matches = conn.execute('SELECT * FROM matches ORDER BY date').fetchall()
+
+    # 初始化所有选手的 TrueSkill 状态字典
+    # key: 用户ID, value: Player 实例（初始值默认为 mu=25, sigma=8.333）
+    ts_dict = {}
+
+    # 构造 TrueSkill 工具类，平局概率设为 0
+    ts_util = TrueSkill(draw_probability=0.0)
+
+    # 存储每天选手评分记录的列表（用于 DataFrame 输出）
+    ts_date_player_list = []
+    last_date = None
+
+    for match in matches:
+        # match 元组中依次为 (id, match_type, a1, a2, b1, b2, score_a, score_b, date)
+        match_type, a1, a2, b1, b2, score_a, score_b, date = match[1:]
+
+        # 当日期发生变化时，将上一天所有选手的状态记录下来
+        if last_date is None or date != last_date:
+            if last_date is not None:  # 记录上一天的状态
+                for user_id, player in ts_dict.items():
+                    ts_date_player_list.append({
+                        "Date": last_date,
+                        "id": user_id,
+                        "mu": player.mu,
+                        "sigma": player.sigma
+                    })
+            last_date = date
+
+        if match_type == '单打':
+            # 单打比赛中只涉及 a1 和 b1 两位选手
+            row = conn.execute(f'SELECT id FROM users WHERE name = "{a1}"').fetchone()
+            a1_id = row[0] if row else None
+            row = conn.execute(f'SELECT id FROM users WHERE name = "{b1}"').fetchone()
+            b1_id = row[0] if row else None
+
+            if a1_id is None or b1_id is None:
+                continue  # 基础数据有误，跳过此场比赛
+
+            # 若选手未初始化，则创建新的 Player 实例
+            if a1_id not in ts_dict:
+                ts_dict[a1_id] = Player()
+            if b1_id not in ts_dict:
+                ts_dict[b1_id] = Player()
+
+            # 获取选手实例
+            p1 = ts_dict[a1_id]
+            p2 = ts_dict[b1_id]
+
+            # 根据比分确定胜负，平局不计
+            if score_a > score_b:
+                ts_util.rate_1v1(winner=p1, loser=p2)
+            else:
+                ts_util.rate_1v1(winner=p2, loser=p1)
+
+        else:
+            # 双打比赛：涉及 4 名选手 a1, a2, b1, b2
+            row = conn.execute(f'SELECT id FROM users WHERE name = "{a1}"').fetchone()
+            a1_id = row[0] if row else None
+            row = conn.execute(f'SELECT id FROM users WHERE name = "{a2}"').fetchone()
+            a2_id = row[0] if row else None
+            row = conn.execute(f'SELECT id FROM users WHERE name = "{b1}"').fetchone()
+            b1_id = row[0] if row else None
+            row = conn.execute(f'SELECT id FROM users WHERE name = "{b2}"').fetchone()
+            b2_id = row[0] if row else None
+
+            if None in [a1_id, a2_id, b1_id, b2_id]:
+                continue  # 数据有误，跳过此场比赛
+
+            # 初始化所有选手（若未曾出现过）
+            for uid in [a1_id, a2_id, b1_id, b2_id]:
+                if uid not in ts_dict:
+                    ts_dict[uid] = Player()
+
+            # 构造双打队伍
+            teamA = [ts_dict[a1_id], ts_dict[a2_id]]
+            teamB = [ts_dict[b1_id], ts_dict[b2_id]]
+
+            # 根据比分决定哪支队伍获胜
+            result = 1 if score_a > score_b else -1
+            ts_util.rate_team(teamA, teamB, result)
+
+    # 结束所有比赛后，记录最后一天的状态
+    for user_id, player in ts_dict.items():
+        ts_date_player_list.append({
+            "Date": last_date,
+            "id": user_id,
+            "mu": player.mu,
+            "sigma": player.sigma
+        })
+
+    # 创建/更新 players_trueskill 表存储最终的 TrueSkill 得分
+    conn.execute('CREATE TABLE IF NOT EXISTS players_trueskill (user_id INTEGER PRIMARY KEY, mu REAL, sigma REAL)')
+    for user_id, player in ts_dict.items():
+        conn.execute('INSERT OR REPLACE INTO players_trueskill (user_id, mu, sigma) VALUES (?, ?, ?)',
+                     (user_id, player.mu, player.sigma))
+    conn.commit()
     conn.close()
 
-    st.dataframe(df, use_container_width=True, column_order=["name", "elo"], hide_index=True)
+    ts_df = pd.DataFrame(ts_date_player_list)
+    return ts_df
 
-    elo_df["Date"] = pd.to_datetime(elo_df["Date"])
-    fig = px.line(elo_df, x="Date", y="Elo", color="name", title="Elo Trends")
-    st.markdown("---")
-    st.markdown("#### Elo 趋势图")
-    st.plotly_chart(fig)
 
+# Elo页面
+def elo_page():
+    select_rating_system = st.selectbox(label="比赛得分排名系统: ",
+                                        options=["ELO (Based on score)", "TrueSkill (Based on distribution)"])
+    if select_rating_system.startswith("ELO"):
+        st.header("🏅 Elo排名")
+        st.markdown("起始分1000分，默认**K factor**: 32 (双打为16)。")
+
+        elo_df = calculate_elo()
+
+        conn = sqlite3.connect('badminton.db')
+        user_df = pd.read_sql("""
+            SELECT id, name
+            from users
+        """, conn)
+        elo_df = elo_df.merge(user_df, "left", on=["id"])
+        df = pd.read_sql('''
+            SELECT u.name, round(p.elo, 1) as elo 
+            FROM players p
+            JOIN users u ON p.user_id = u.id
+            ORDER BY p.elo DESC
+        ''', conn)
+        conn.close()
+
+        st.dataframe(df, use_container_width=True, column_order=["name", "elo"], hide_index=True)
+
+        elo_df["Date"] = pd.to_datetime(elo_df["Date"])
+        fig = px.line(elo_df, x="Date", y="Elo", color="name", title="Elo Trends")
+        st.markdown("---")
+        st.markdown("#### Elo 趋势图")
+        st.plotly_chart(fig)
+    elif select_rating_system.startswith("TrueSkill"):
+        st.header("🏅 TrueSkill排名")
+        st.markdown(r"玩家的初始分布设置为$\mathcal{N}\left(25, \left(\frac{25}{3}\right)^2\right)$")
+        # 先计算 TrueSkill 的历史记录（需要按日期顺序更新评分，返回 DataFrame）
+        ts_history_df = calculate_trueskill()
+        # ts_history_df 的结构：["Date", "id", "mu", "sigma"]
+
+        # 连接数据库，获取用户信息以及最终 TrueSkill 得分
+        conn = sqlite3.connect('badminton.db')
+        user_df = pd.read_sql("""
+            SELECT id, name
+            FROM users
+        """, conn)
+
+        # 将 TrueSkill 历史记录与用户姓名关联（按用户id合并）
+        ts_history_df = ts_history_df.merge(user_df, how="left", on="id")
+
+        # 获取最终 TrueSkill 得分（存储在 players_trueskill 表中），并按 mu 排序
+        final_ts_df = pd.read_sql('''
+            SELECT u.name, round(p.mu, 1) as trueskill  
+            FROM players_trueskill p
+            JOIN users u ON p.user_id = u.id
+            ORDER BY p.mu DESC
+        ''', conn)
+        conn.close()
+
+        # 显示最终 TrueSkill 得分表
+        st.dataframe(final_ts_df, use_container_width=True, column_order=["name", "trueskill"], hide_index=True)
+
+        # 合并用户姓名
+        ts_history_df["Date"] = pd.to_datetime(ts_history_df["Date"])
+
+        # Streamlit 选项：是否错开同一天内的点（在 x 轴上添加微小的时间偏移）
+        offset_option = st.checkbox("是否错开显示用户坐标？", value=False)
+
+        if offset_option:
+            # 针对每周最多 10 个人，为了使展示更清晰，
+            # 采用对称的两个小时偏移：假设所有用户均匀分布在 -1 小时到 +1 小时之间
+            unique_names = sorted(ts_history_df["name"].dropna().unique())
+            n = len(unique_names)
+            if n > 1:
+                # 间隔 = 总时长 2 小时除以 (n-1)
+                spacing = pd.Timedelta(hours=20) / (n - 1)
+            else:
+                spacing = pd.Timedelta(0)
+
+            # 每个用户的偏移： (index - (n-1)/2) * spacing
+            offset_map = {name: (pd.Timedelta(0) + (index - (n - 1) / 2) * spacing)
+                          for index, name in enumerate(unique_names)}
+            # 新增 Date_offset 列：原始日期加上用户对应的偏移
+            ts_history_df["Date_offset"] = ts_history_df.apply(
+                lambda row: row["Date"] + offset_map.get(row["name"], pd.Timedelta(0)),
+                axis=1
+            )
+            x_column = "Date_offset"
+        else:
+            x_column = "Date"
+
+        # 根据 sigma 计算 95% 置信区间半宽度（1.96 * sigma）
+        ts_history_df["error"] = 1.96 * ts_history_df["sigma"]
+
+        # 绘制趋势图：每个数据点显示 mu 值和对应的误差条
+        fig = px.line(
+            ts_history_df,
+            x=x_column,
+            y="mu",
+            color="name",
+            error_y="error",
+            title="Trueskill Trends (with 95% CI)"
+        )
+        st.markdown("#### Trueskill 趋势图")
+        st.plotly_chart(fig)
 
 # 管理页面
 def manage_page():
@@ -560,7 +745,7 @@ def main():
     pages = {
         "用户管理": user_management,
         "比赛记录": main_page,
-        "Elo排名": elo_page,
+        "Ranking": elo_page,
         "数据管理": manage_page,
         "比赛分配": match_scheduler_page  # 新增页面
     }
