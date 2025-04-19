@@ -747,7 +747,7 @@ def main():
         "比赛记录": main_page,
         "Ranking": elo_page,
         "数据管理": manage_page,
-        "比赛分配": match_scheduler_page  # 新增页面
+        # "比赛分配": match_scheduler_page
     }
     page = st.sidebar.radio("页面", list(pages.keys()))
     pages[page]()
