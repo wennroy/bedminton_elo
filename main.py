@@ -372,12 +372,15 @@ def load_players_data():
     return players_df
 
 
-def predict_elo(teamA_ids, teamB_ids, players_df = load_players_data()):
+def predict_elo(teamA_ids, teamB_ids, players_df = None):
     """
     根据 Elo 评分计算双打比赛预测胜率。双方队伍 Elo 为队内选手 Elo 平均值。
     返回:
        teamA_win_prob, teamB_win_prob
     """
+    if players_df is None:
+        st.error("Something went into error!")
+        return 0, 0
     # 从 players_df 中查找 Elo 分数
     teamA_elo = players_df[players_df["id"].isin(teamA_ids)]["elo"].mean()
     teamB_elo = players_df[players_df["id"].isin(teamB_ids)]["elo"].mean()
@@ -387,7 +390,7 @@ def predict_elo(teamA_ids, teamB_ids, players_df = load_players_data()):
     return teamA_win_prob, teamB_win_prob
 
 
-def predict_trueskill(teamA_ids, teamB_ids, players_df = load_players_data()):
+def predict_trueskill(teamA_ids, teamB_ids, players_df = None):
     """
     根据 TrueSkill 预测双打结果，构造双方 Player 对象（使用 mu、sigma）。
     调用 TrueSkill 类中的 predict_team_outcome 方法计算胜率等。
@@ -396,6 +399,13 @@ def predict_trueskill(teamA_ids, teamB_ids, players_df = load_players_data()):
          loss: 队伍 A 失败（队伍 B 获胜）概率
          draw: 平局概率（此处设置为 0）
     """
+    if players_df is None:
+        st.error("Something went into error!")
+        return {
+            "win": 0,
+            "draw": 0,
+            "loss": 0
+        }
     # 创建 TrueSkill 工具实例，设置 draw_probability 为 0
     ts_util = TrueSkill(draw_probability=0.0)
 
@@ -549,12 +559,12 @@ def elo_page():
 
         if select_rating_system.startswith("ELO"):
             # Elo 预测
-            elo_teamA_prob, elo_teamB_prob = predict_elo(teamA_ids, teamB_ids)
+            elo_teamA_prob, elo_teamB_prob = predict_elo(teamA_ids, teamB_ids, players_df)
             st.write(f"队伍 A 胜率：{elo_teamA_prob * 100:.1f}%")
             st.write(f"队伍 B 胜率：{elo_teamB_prob * 100:.1f}%")
         elif select_rating_system.startswith("TrueSkill"):
             # TrueSkill 预测
-            ts_outcome = predict_trueskill(teamA_ids, teamB_ids)
+            ts_outcome = predict_trueskill(teamA_ids, teamB_ids, players_df)
             st.write(f"队伍 A 获胜概率：{ts_outcome['win'] * 100:.1f}%")
             # st.write(f"平局概率：{ts_outcome['draw'] * 100:.1f}%")
             st.write(f"队伍 B 获胜概率：{ts_outcome['loss'] * 100:.1f}%")
