@@ -727,6 +727,7 @@ def match_scheduler_page():
     if pending_matches.empty:
         st.info("当前没有待处理的比赛")
     else:
+        show_predict_win = st.checkbox("是否显示预测胜率(基于TrueSkill)")
         for count, (_, match) in enumerate(pending_matches.iterrows()):
             with st.expander(f"比赛 {count+1}"):
                 with st.form(key=f"match_{match['id']}"):
@@ -735,7 +736,37 @@ def match_scheduler_page():
                     a2 = id_to_name[match['player_a2']]
                     b1 = id_to_name[match['player_b1']]
                     b2 = id_to_name[match['player_b2']]
-                    st.markdown(f"**{a1} / {a2}** vs **{b1} / {b2}**")
+                    if show_predict_win:
+                        conn = sqlite3.connect('badminton.db')
+                        ts_df = pd.read_sql('''
+                            SELECT u.name, u.id, round(p.mu, 1) as mean, round(p.sigma, 2) as std_deviation
+                            FROM players_trueskill p
+                            JOIN users u ON p.user_id = u.id
+                            ORDER BY p.mu DESC
+                        ''', conn)
+                        conn.close()
+                        ts_df.set_index('name', inplace=True)
+
+                        # 提取各选手的统计信息
+                        a1_mean = ts_df.loc[a1, 'mean']
+                        a1_std = ts_df.loc[a1, 'std_deviation']
+
+                        a2_mean = ts_df.loc[a2, 'mean']
+                        a2_std = ts_df.loc[a2, 'std_deviation']
+
+                        b1_mean = ts_df.loc[b1, 'mean']
+                        b1_std = ts_df.loc[b1, 'std_deviation']
+
+                        b2_mean = ts_df.loc[b2, 'mean']
+                        b2_std = ts_df.loc[b2, 'std_deviation']
+
+                        player_a1, player_a2, player_b1, player_b2 = Player(a1_mean, a1_std), Player(a2_mean, a2_std), \
+                            Player(b1_mean, b1_std), Player(b2_mean, b2_std)
+                        ts = TrueSkill()
+                        win_prob = ts.predict_team_outcome_win([player_a1, player_a2], [player_b1, player_b2])
+                        st.markdown(f"**{a1} / {a2}** vs **{b1} / {b2}** (Predicted win: {round(win_prob*100, 1)}%)")
+                    else:
+                        st.markdown(f"**{a1} / {a2}** vs **{b1} / {b2}**")
 
                     # 比分输入
                     col1, col2 = st.columns(2)
