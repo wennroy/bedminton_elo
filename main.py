@@ -619,12 +619,71 @@ def manage_page():
 
     conn.close()
 
+def init_results_table(conn):
+    """
+    初始化表：如果不存在就创建一个 optimization_results 表，
+    字段包括自增主键、时间戳、seed，以及 alpha_var、best_loss、mean_closeness、max_closeness。
+    """
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS optimization_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp DATETIME   DEFAULT CURRENT_TIMESTAMP,
+            seed      INTEGER,
+            alpha_var REAL,
+            best_loss REAL,
+            mean_closeness REAL,
+            max_closeness  REAL
+        )
+    ''')
+    conn.commit()
+
+def insert_results(conn, seed, alpha_var, best_loss, mean_closeness, max_closeness):
+    """
+    向 optimization_results 表插入一行数据。
+    timestamp 列使用默认 CURRENT_TIMESTAMP 自动填充。
+    """
+    c = conn.cursor()
+    c.execute('''
+        INSERT INTO optimization_results
+            (seed, alpha_var, best_loss, mean_closeness, max_closeness)
+        VALUES (?, ?, ?, ?, ?)
+    ''', (seed, alpha_var, best_loss, mean_closeness, max_closeness))
+    conn.commit()
+
+def clear_results_table(conn):
+    """
+    清空 optimization_results 表中的所有记录。
+    """
+    c = conn.cursor()
+    c.execute('DELETE FROM optimization_results')
+    conn.commit()
+
+def get_opt_results(conn):
+    """
+    读取唯一一行记录，并以 (seed, timestamp, alpha_var, best_loss, mean_closeness, max_closeness) 的形式返回。
+    如果没有记录则返回 None；如果多于一行则抛出错误。
+    """
+    c = conn.cursor()
+    c.execute('''
+        SELECT seed, timestamp, alpha_var, best_loss, mean_closeness, max_closeness
+        FROM optimization_results
+    ''')
+    rows = c.fetchall()
+    if len(rows) == 0:
+        return None, None, None, None, None, None
+    if len(rows) > 1:
+        raise ValueError(f"预期只有一行结果，但查询到 {len(rows)} 行")
+    return rows[0]
+
+
 # 新增比赛分配页面
 def match_scheduler_page():
     st.header("🎯 双打比赛分配")
 
     # 初始化数据库
     conn = sqlite3.connect('badminton.db')
+    init_results_table(conn)
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS pending_matches
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -698,7 +757,9 @@ def match_scheduler_page():
             max_play_gap=2,
             seed=seed
         )
-        st.write(f"生成比赛最大胜率差为{round(max_closeness, 2)}, 胜率差均值为{round(mean_closeness, 2)},比赛场次数方差为{round(alpha_var, 2)}")
+        conn = sqlite3.connect('badminton.db')
+        insert_results(conn, seed, alpha_var, best_loss, mean_closeness, max_closeness)
+        conn.close()
         matches = []
         for idx, (team1, team2) in enumerate(schedule):
             team1_id = [player_id_list[p][1] for p in team1]
@@ -727,6 +788,13 @@ def match_scheduler_page():
     if pending_matches.empty:
         st.info("当前没有待处理的比赛")
     else:
+        conn = sqlite3.connect('badminton.db')
+        seed_val, timestamp_val, alpha_var, best_loss, mean_closeness, max_closeness = get_opt_results(conn)
+        conn.close()
+        if alpha_var is not None:
+            st.write(f"Seed={seed_val}, Generated Time={timestamp_val}")
+            st.write(
+                f"最大胜率差={round(max_closeness, 2)}, 胜率差均值={round(mean_closeness, 2)}, 比赛场次数方差={round(alpha_var, 2)}")
         show_predict_win = st.checkbox("是否显示预测胜率(基于TrueSkill)")
         for count, (_, match) in enumerate(pending_matches.iterrows()):
             with st.expander(f"比赛 {count+1}"):
@@ -811,6 +879,7 @@ def match_scheduler_page():
                     )
                 conn.execute("DELETE FROM pending_matches WHERE submitted=1")
                 conn.commit()
+                clear_results_table(conn)
                 conn.close()
                 st.success(f"已保存 {len(submitted)} 场比赛到主记录！")
                 st.rerun()
@@ -820,6 +889,7 @@ def match_scheduler_page():
                 conn = sqlite3.connect('badminton.db')
                 conn.execute("DELETE FROM pending_matches")
                 conn.commit()
+                clear_results_table(conn)
                 conn.close()
                 st.success("已重置所有待处理比赛！")
                 st.rerun()
