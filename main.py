@@ -9,6 +9,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import math
 from trueskill_utils import TrueSkill, Player
+from random_utils import optimize_schedule
 
 from utils import generate_double_configurations, standardized_elo, DoublesScheduler
 
@@ -649,12 +650,11 @@ def match_scheduler_page():
     with st.form("match_params"):
         st.subheader("比赛参数设置")
         total_matches = st.number_input("总比赛场次", min_value=1, value=4)
-        # alpha = st.slider("随机比赛比例", 0.0, 1.0, 0.2)
-        alpha = 0
         selected_players = st.multiselect("选择参赛选手", list(users.keys()))
         seed = st.number_input("随机种子（可选）", min_value=0, format="%d", value=None)
-        temperature = st.number_input("温度：温度越低平衡性越好", min_value=0.0, max_value=1.0, step=0.000001, value=0.5,
-                                      format="%0.6f")
+        temperature = st.slider("温度：温度越低平衡性越好", min_value=0.0, max_value=1.0, step=0.05, value=0.5,
+                                      format="%0.1f")
+        # max_player_gap = st.slider("最大比赛数量差", min_value=1, max_value=3, value=1, step=1)
         generate_btn = st.form_submit_button("生成比赛")
 
     if generate_btn:
@@ -662,9 +662,6 @@ def match_scheduler_page():
         if len(selected_players) < 4:
             st.error("至少需要选择4名选手")
             return
-        # if len(selected_players) % 2 != 0:
-        #     st.error("选手数量必须为偶数")
-        #     return
 
         # 设置随机种子
         if seed is None:
@@ -673,104 +670,54 @@ def match_scheduler_page():
         random.seed(seed)
         np.random.seed(seed)
 
-        # 获取选手ELO数据
+        # 获取选手trueskill数据
+        ts_history_df = calculate_trueskill()
         conn = sqlite3.connect('badminton.db')
-        query = '''SELECT u.id, u.name, COALESCE(p.elo, ?) as elo 
-                   FROM users u LEFT JOIN players p ON u.id = p.user_id
-                   WHERE u.name IN ({})'''.format(','.join(['?'] * len(selected_players)))
-        players = pd.read_sql(query, conn, params=[INITIAL_RATING] + selected_players).to_dict('records')
+        ts_df = pd.read_sql('''
+            SELECT u.name, u.id, round(p.mu, 1) as mean, round(p.sigma, 2) as std_deviation
+            FROM players_trueskill p
+            JOIN users u ON p.user_id = u.id
+            ORDER BY p.mu DESC
+        ''', conn)
         conn.close()
 
         # 初始化参赛次数计数器
-        player_ids = [p['id'] for p in players]
-        play_count = {pid: 0 for pid in player_ids}
-        players_dict = {player["id"]: player["elo"] for player in players}
-        # st.write(players_dict)
+        player_list = []
+        player_id_list = []
+        for index, row in ts_df.iterrows():
+            player_id_list.append((row["name"], row["id"]))
+            player_list.append(Player(row["mean"], row["std_deviation"]))
 
-        # 计算各类型比赛数量
-        non_random_num = int(np.ceil(total_matches * (1 - alpha)))
-        random_num = total_matches - non_random_num
-
-        # 生成非随机比赛（改进后的算法）
-        non_random_matches = []
-        player_elo = standardized_elo(players_dict)
-
-        sched = DoublesScheduler(player_elo, non_random_num)
-        # 计算归一化常量
-        c_bar = np.mean(sched.costs)
-        M = sched.M
-        # 设定归一化参数 alpha' = 0.1，映射到原始 alpha
-        alpha_prime = 5000
-        alpha_orig = alpha_prime * c_bar * M
-
-        # print(f"归一化 alpha'={alpha_prime}, 对应 alpha_orig={alpha_orig:.4f}")
-
-        # 求解并采样
-        p = sched.solve(alpha_orig)
-        st.write(alpha_orig)
-        st.write(f"分布 p_j 最大值: {np.max(p):.4f}, 熵: {-np.sum(p * np.log(p + 1e-12)):.4f}")
-        schedule = sched.sample_schedule()
-
-        for idx, match in enumerate(schedule, 1):
-            # 更新参赛次数
-            play_count[match[0][0]] += 1
-            play_count[match[0][1]] += 1
-            play_count[match[1][0]] += 1
-            play_count[match[1][1]] += 1
-            non_random_matches.append((match[0], match[1]))
-
-        # 生成随机比赛（改进后的算法）
-        random_matches = []
-        for _ in range(random_num):
-            # 根据参赛次数加权随机选择
-            weights = [1 / (play_count[pid] + 0.1) for pid in player_ids]  # 参赛次数越少权重越高
-            selected = random.choices(player_ids, weights=weights, k=4)
-
-            # 随机分成两队
-            random.shuffle(selected)
-            team_a = sorted(selected[:2])
-            team_b = sorted(selected[2:])
-
-            random_matches.append((team_a, team_b))
-
-            # 更新参赛次数
-            for pid in selected:
-                play_count[pid] += 1
-
+        schedule, alpha_var, best_loss, mean_closeness, max_closeness = optimize_schedule(
+            n=len(player_list),
+            m=total_matches,
+            ts=TrueSkill(draw_probability=0.0),
+            players=player_list,
+            lambda_weight=temperature,
+            iters=5000,
+            max_play_gap=2,
+            seed=seed
+        )
+        st.write(f"生成比赛最大胜率差为{round(max_closeness, 2)}, 胜率差均值为{round(mean_closeness, 2)},比赛场次数方差为{round(alpha_var, 2)}")
+        matches = []
+        for idx, (team1, team2) in enumerate(schedule):
+            team1_id = [player_id_list[p][1] for p in team1]
+            team2_id = [player_id_list[p][1] for p in team2]
+            matches.append((team1_id, team2_id))
         # 保存到数据库
         conn = sqlite3.connect('badminton.db')
         c = conn.cursor()
         c.execute("DELETE FROM pending_matches")  # 清除旧数据
 
-        # 插入非随机比赛
-        for match in non_random_matches:
+        # 插入比赛
+        for match in matches:
             c.execute('''INSERT INTO pending_matches 
                       (player_a1, player_a2, player_b1, player_b2) 
                       VALUES (?,?,?,?)''',
                       (match[0][0], match[0][1], match[1][0], match[1][1]))
-
-        # 插入随机比赛
-        for match in random_matches:
-            c.execute('''INSERT INTO pending_matches 
-                      (player_a1, player_a2, player_b1, player_b2) 
-                      VALUES (?,?,?,?)''',
-                      (match[0][0], match[0][1], match[1][0], match[1][1]))
-
         conn.commit()
         conn.close()
-        st.success(f"成功生成 {len(non_random_matches) + len(random_matches)} 场比赛！")
-
-        # 显示参赛次数统计
-        st.subheader("选手参赛次数统计")
-        count_data = []
-        for pid, cnt in play_count.items():
-            count_data.append({
-                "选手": id_to_name[pid],
-                "参赛次数": cnt,
-                "ELO": players_dict[pid]
-            })
-        df_counts = pd.DataFrame(count_data).sort_values("参赛次数")
-        st.dataframe(df_counts, use_container_width=True)
+        st.success(f"成功生成 {len(matches)} 场比赛！")
     # 显示待处理比赛
     st.subheader("待处理比赛列表")
     conn = sqlite3.connect('badminton.db')
@@ -835,6 +782,7 @@ def match_scheduler_page():
                 conn.commit()
                 conn.close()
                 st.success(f"已保存 {len(submitted)} 场比赛到主记录！")
+                st.rerun()
 
         with col2:
             if st.button("⚠️ 重置所有比赛"):
@@ -856,7 +804,7 @@ def main():
         "比赛记录": main_page,
         "Ranking": elo_page,
         "数据管理": manage_page,
-        # "比赛分配": match_scheduler_page
+        "比赛分配": match_scheduler_page
     }
     page = st.sidebar.radio("页面", list(pages.keys()))
     pages[page]()

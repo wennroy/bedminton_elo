@@ -197,6 +197,9 @@ class TrueSkill:
 
         return {'win': p_win, 'draw': p_draw, 'loss': p_loss}
 
+    def predict_team_outcome_win(self, teamA, teamB):
+        return self.predict_team_outcome(teamA, teamB)["win"]
+
 
 # 示例：运行一些简单测试
 if __name__ == "__main__":
