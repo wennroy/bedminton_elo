@@ -758,6 +758,7 @@ def match_scheduler_page():
             seed=seed
         )
         conn = sqlite3.connect('badminton.db')
+        clear_results_table(conn)
         insert_results(conn, seed, alpha_var, best_loss, mean_closeness, max_closeness)
         conn.close()
         matches = []
