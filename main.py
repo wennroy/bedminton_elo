@@ -732,12 +732,13 @@ def match_scheduler_page():
         # 获取选手trueskill数据
         ts_history_df = calculate_trueskill()
         conn = sqlite3.connect('badminton.db')
-        ts_df = pd.read_sql('''
+        query = '''
             SELECT u.name, u.id, round(p.mu, 1) as mean, round(p.sigma, 2) as std_deviation
             FROM players_trueskill p
             JOIN users u ON p.user_id = u.id
-            ORDER BY p.mu DESC
-        ''', conn)
+            WHERE u.name IN ({})
+            ORDER BY p.mu DESC'''.format(','.join(['?'] * len(selected_players)))
+        ts_df = pd.read_sql(query, conn, params=selected_players)
         conn.close()
 
         # 初始化参赛次数计数器
