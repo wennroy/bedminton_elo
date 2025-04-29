@@ -55,11 +55,12 @@ def compute_loss(schedule, players, ts, lambda_weight):
     # 计算出场次数方差
     mean_count = sum(counts) / n
     alpha = sum((c - mean_count)**2 for c in counts) / n
+    entropy = (chaos_by_entropy(schedule_team) +
+               chaos_by_entropy(list(map(lambda x: (tuple(sorted(x[0])), tuple(sorted(x[1]))), schedule))))
 
-    total_loss = (alpha + lambda_weight * (chaos_by_entropy(schedule_team) +
-                   chaos_by_entropy(list(map(lambda x: (tuple(sorted(x[0])), tuple(sorted(x[1]))), schedule)))) +
+    total_loss = (alpha + lambda_weight * entropy +
                   (1-lambda_weight) * closeness_sum / len(closeness_list) * 2)
-    return total_loss, alpha, closeness_sum, closeness_list
+    return total_loss, alpha, closeness_sum, closeness_list, entropy
 
 def normalize_matches(matches):
     matches = [normalize_match(m) for m in matches]
@@ -172,7 +173,8 @@ def optimize_schedule(n, m, ts, players, lambda_weight=0.5, iters=1000, start_te
         random.seed(seed)  # ✅ 加上这句，控制随机性！
     final_closeness = []
     best_schedule = random_initial_schedule(n, m)
-    best_loss, best_alpha, best_closeness, closeness_list = compute_loss(best_schedule, players, ts, lambda_weight)
+    best_entropy = 1
+    best_loss, best_alpha, best_closeness, closeness_list, entropy = compute_loss(best_schedule, players, ts, lambda_weight)
     current_schedule = best_schedule
     current_loss = best_loss
     T = start_temp
@@ -180,7 +182,7 @@ def optimize_schedule(n, m, ts, players, lambda_weight=0.5, iters=1000, start_te
     for k in range(iters):
         # 生成邻域新赛程
         neighbor = get_neighbor(current_schedule, n)
-        loss, alpha_var, closeness_sum, closeness_list = compute_loss(neighbor, players, ts, lambda_weight)
+        loss, alpha_var, closeness_sum, closeness_list, entropy = compute_loss(neighbor, players, ts, lambda_weight)
         # 如果新解更优则接受，或按概率接受较差解
         if loss < current_loss or random.random() < math.exp((current_loss - loss) / T):
             current_schedule = neighbor
@@ -192,6 +194,7 @@ def optimize_schedule(n, m, ts, players, lambda_weight=0.5, iters=1000, start_te
                 best_alpha = alpha_var
                 best_closeness = closeness_sum
                 final_closeness = closeness_list
+                best_entropy = entropy
         # 降低温度
         T *= alpha_decay
         if T < 1e-4:
@@ -200,7 +203,7 @@ def optimize_schedule(n, m, ts, players, lambda_weight=0.5, iters=1000, start_te
     # ✅ 赛程结束后统计胜率偏差情况
     mean_closeness = sum(final_closeness) / len(final_closeness)
     max_closeness = max(final_closeness)
-    return best_schedule, best_alpha, best_loss, mean_closeness, max_closeness
+    return best_schedule, best_alpha, best_loss, mean_closeness, max_closeness, best_entropy
 
 
 
@@ -220,7 +223,7 @@ if __name__ == "__main__":
     lambda_weight = 0  # 控制胜率平衡的重要性
 
     # 调用 optimize_schedule （假设你已经有了上次那段代码）
-    schedule, alpha_var, best_loss, mean_closeness, max_closeness = optimize_schedule(
+    schedule, alpha_var, best_loss, mean_closeness, max_closeness, entropy = optimize_schedule(
         n=7,
         m=10,
         ts=ts,

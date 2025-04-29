@@ -634,12 +634,13 @@ def init_results_table(conn):
             best_loss REAL,
             mean_closeness REAL,
             max_closeness  REAL,
-            lambda_val REAL
+            lambda_val REAL,
+            entropy REAL
         )
     ''')
     conn.commit()
 
-def insert_results(conn, seed, alpha_var, best_loss, mean_closeness, max_closeness, lambda_val):
+def insert_results(conn, seed, alpha_var, best_loss, mean_closeness, max_closeness, entropy, lambda_val):
     """
     向 optimization_results 表插入一行数据。
     timestamp 列使用默认 CURRENT_TIMESTAMP 自动填充。
@@ -647,9 +648,9 @@ def insert_results(conn, seed, alpha_var, best_loss, mean_closeness, max_closene
     c = conn.cursor()
     c.execute('''
         INSERT INTO optimization_results
-            (seed, alpha_var, best_loss, mean_closeness, max_closeness, lambda_val)
-        VALUES (?, ?, ?, ?, ?, ?)
-    ''', (seed, alpha_var, best_loss, mean_closeness, max_closeness, lambda_val))
+            (seed, alpha_var, best_loss, mean_closeness, max_closeness, lambda_val, entropy)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    ''', (seed, alpha_var, best_loss, mean_closeness, max_closeness, lambda_val, entropy))
     conn.commit()
 
 def clear_results_table(conn):
@@ -667,12 +668,12 @@ def get_opt_results(conn):
     """
     c = conn.cursor()
     c.execute('''
-        SELECT seed, timestamp, alpha_var, best_loss, mean_closeness, max_closeness, lambda_val
+        SELECT seed, timestamp, alpha_var, best_loss, mean_closeness, max_closeness, lambda_val, entropy
         FROM optimization_results
     ''')
     rows = c.fetchall()
     if len(rows) == 0:
-        return None, None, None, None, None, None, None
+        return None, None, None, None, None, None, None, None
     if len(rows) > 1:
         raise ValueError(f"预期只有一行结果，但查询到 {len(rows)} 行")
     return rows[0]
@@ -749,7 +750,7 @@ def match_scheduler_page():
             player_id_list.append((row["name"], row["id"]))
             player_list.append(Player(row["mean"], row["std_deviation"]))
 
-        schedule, alpha_var, best_loss, mean_closeness, max_closeness = optimize_schedule(
+        schedule, alpha_var, best_loss, mean_closeness, max_closeness, entropy = optimize_schedule(
             n=len(player_list),
             m=total_matches,
             ts=TrueSkill(draw_probability=0.0),
@@ -761,7 +762,7 @@ def match_scheduler_page():
         )
         conn = sqlite3.connect('badminton.db')
         clear_results_table(conn)
-        insert_results(conn, seed, alpha_var, best_loss, mean_closeness, max_closeness, lambda_val=temperature)
+        insert_results(conn, seed, alpha_var, best_loss, mean_closeness * 2, max_closeness * 2, entropy, lambda_val=temperature)
         conn.close()
         matches = []
         for idx, (team1, team2) in enumerate(schedule):
@@ -792,12 +793,12 @@ def match_scheduler_page():
         st.info("当前没有待处理的比赛")
     else:
         conn = sqlite3.connect('badminton.db')
-        seed_val, timestamp_val, alpha_var, best_loss, mean_closeness, max_closeness, temperature_val = get_opt_results(conn)
+        seed_val, timestamp_val, alpha_var, best_loss, mean_closeness, max_closeness, temperature_val, entropy = get_opt_results(conn)
         conn.close()
         if alpha_var is not None:
             st.write(f"Seed={seed_val}, Temperature={temperature_val}, Generated Time={timestamp_val}")
             st.write(
-                f"最大胜率差={round(max_closeness, 2)}, 胜率差均值={round(mean_closeness, 2)}, 比赛场次数方差={round(alpha_var, 2)}")
+                f"最大胜负差={round(max_closeness, 2)}, 胜负差均值={round(mean_closeness, 2)}, 比赛场次数方差={round(alpha_var, 2)}, 比赛重复程度={round(entropy, 2)}")
         show_predict_win = st.checkbox("是否显示预测胜率(基于TrueSkill)")
         for count, (_, match) in enumerate(pending_matches.iterrows()):
             with st.expander(f"比赛 {count+1}"):
