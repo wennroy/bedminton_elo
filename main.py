@@ -633,12 +633,13 @@ def init_results_table(conn):
             alpha_var REAL,
             best_loss REAL,
             mean_closeness REAL,
-            max_closeness  REAL
+            max_closeness  REAL,
+            lambda_val REAL
         )
     ''')
     conn.commit()
 
-def insert_results(conn, seed, alpha_var, best_loss, mean_closeness, max_closeness):
+def insert_results(conn, seed, alpha_var, best_loss, mean_closeness, max_closeness, lambda_val):
     """
     向 optimization_results 表插入一行数据。
     timestamp 列使用默认 CURRENT_TIMESTAMP 自动填充。
@@ -646,9 +647,9 @@ def insert_results(conn, seed, alpha_var, best_loss, mean_closeness, max_closene
     c = conn.cursor()
     c.execute('''
         INSERT INTO optimization_results
-            (seed, alpha_var, best_loss, mean_closeness, max_closeness)
-        VALUES (?, ?, ?, ?, ?)
-    ''', (seed, alpha_var, best_loss, mean_closeness, max_closeness))
+            (seed, alpha_var, best_loss, mean_closeness, max_closeness, lambda_val)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ''', (seed, alpha_var, best_loss, mean_closeness, max_closeness, lambda_val))
     conn.commit()
 
 def clear_results_table(conn):
@@ -666,12 +667,12 @@ def get_opt_results(conn):
     """
     c = conn.cursor()
     c.execute('''
-        SELECT seed, timestamp, alpha_var, best_loss, mean_closeness, max_closeness
+        SELECT seed, timestamp, alpha_var, best_loss, mean_closeness, max_closeness, lambda_val
         FROM optimization_results
     ''')
     rows = c.fetchall()
     if len(rows) == 0:
-        return None, None, None, None, None, None
+        return None, None, None, None, None, None, None
     if len(rows) > 1:
         raise ValueError(f"预期只有一行结果，但查询到 {len(rows)} 行")
     return rows[0]
@@ -711,7 +712,7 @@ def match_scheduler_page():
         total_matches = st.number_input("总比赛场次", min_value=1, value=4)
         selected_players = st.multiselect("选择参赛选手", list(users.keys()))
         seed = st.number_input("随机种子（可选）", min_value=0, format="%d", value=None)
-        temperature = st.slider("温度：温度越低平衡性越好", min_value=0.0, max_value=1.0, step=0.05, value=0.5,
+        temperature = st.slider("温度：温度越低平衡性越好", min_value=0.0, max_value=1.0, step=0.1, value=0.5,
                                       format="%0.1f")
         # max_player_gap = st.slider("最大比赛数量差", min_value=1, max_value=3, value=1, step=1)
         generate_btn = st.form_submit_button("生成比赛")
@@ -760,7 +761,7 @@ def match_scheduler_page():
         )
         conn = sqlite3.connect('badminton.db')
         clear_results_table(conn)
-        insert_results(conn, seed, alpha_var, best_loss, mean_closeness, max_closeness)
+        insert_results(conn, seed, alpha_var, best_loss, mean_closeness, max_closeness, lambda_val=temperature)
         conn.close()
         matches = []
         for idx, (team1, team2) in enumerate(schedule):
@@ -791,10 +792,10 @@ def match_scheduler_page():
         st.info("当前没有待处理的比赛")
     else:
         conn = sqlite3.connect('badminton.db')
-        seed_val, timestamp_val, alpha_var, best_loss, mean_closeness, max_closeness = get_opt_results(conn)
+        seed_val, timestamp_val, alpha_var, best_loss, mean_closeness, max_closeness, temperature_val = get_opt_results(conn)
         conn.close()
         if alpha_var is not None:
-            st.write(f"Seed={seed_val}, Generated Time={timestamp_val}")
+            st.write(f"Seed={seed_val}, Temperature={temperature_val}, Generated Time={timestamp_val}")
             st.write(
                 f"最大胜率差={round(max_closeness, 2)}, 胜率差均值={round(mean_closeness, 2)}, 比赛场次数方差={round(alpha_var, 2)}")
         show_predict_win = st.checkbox("是否显示预测胜率(基于TrueSkill)")

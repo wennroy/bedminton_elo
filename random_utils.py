@@ -37,8 +37,8 @@ def compute_loss(schedule, players, ts, lambda_weight):
     # 遍历每场比赛，统计出场次数并累加胜率偏差
     for team1, team2 in schedule:
         # 累加出场次数
-        schedule_team.append(tuple(team1))
-        schedule_team.append(tuple(team2))
+        schedule_team.append(tuple(sorted(team1)))
+        schedule_team.append(tuple(sorted(team2)))
         for i in team1 + team2:
             counts[i] += 1
         # 预测胜率
@@ -56,8 +56,33 @@ def compute_loss(schedule, players, ts, lambda_weight):
     mean_count = sum(counts) / n
     alpha = sum((c - mean_count)**2 for c in counts) / n
 
-    total_loss = alpha + lambda_weight * chaos_by_entropy(schedule_team) + (1-lambda_weight) * closeness_sum / len(closeness_list) * 2
+    total_loss = (alpha + lambda_weight * (chaos_by_entropy(schedule_team) +
+                   chaos_by_entropy(list(map(lambda x: (tuple(sorted(x[0])), tuple(sorted(x[1]))), schedule)))) +
+                  (1-lambda_weight) * closeness_sum / len(closeness_list) * 2)
     return total_loss, alpha, closeness_sum, closeness_list
+
+def normalize_matches(matches):
+    matches = [normalize_match(m) for m in matches]
+    return matches
+
+def normalize_match(match):
+    """
+    将一场对局归一化为唯一表示形式：两个队伍内部排序，队伍间按字典序排序。
+
+    参数:
+        match: 一个二元组 (team1, team2)，
+               team1 和 team2 都是玩家编号的元组，例如 (1, 2) 或 (4, 3)
+    返回:
+        归一化后的对局 ((a, b), (c, d))，满足 a <= b, c <= d, 且 (a, b) <= (c, d)
+    """
+    # 拆分队伍
+    team1, team2 = match
+    # 队伍内部排序
+    t1 = tuple(sorted(team1))
+    t2 = tuple(sorted(team2))
+    # 队伍间排序，保证唯一
+    return (t1, t2) if t1 <= t2 else (t2, t1)
+
 
 def random_initial_schedule(n, m):
     """
@@ -74,7 +99,7 @@ def random_initial_schedule(n, m):
         team1 = random.sample(team, 2)
         team2 = [p for p in team if p not in team1]
         schedule.append((team1, team2))
-    return schedule
+    return normalize_matches(schedule)
 
 def get_neighbor(schedule, n):
     """
@@ -140,7 +165,7 @@ def get_neighbor(schedule, n):
             new_team2 = [p for p in all4 if p not in new_team1]
             new_schedule[i] = (new_team1, new_team2)
 
-    return new_schedule
+    return normalize_matches(new_schedule)
 
 def optimize_schedule(n, m, ts, players, lambda_weight=0.5, iters=1000, start_temp=1.0, alpha_decay=0.995, max_play_gap=2, seed=None):
     if seed is not None:
