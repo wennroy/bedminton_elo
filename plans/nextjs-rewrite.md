@@ -64,7 +64,7 @@
   - 要点:以 `legacy/main.py`(calculate_elo/calculate_trueskill/predict)、`legacy/trueskill_utils.py`、`legacy/random_utils.py` 为移植 spec。ELO 双打必须修 bug:`Δ_p = K*(S − E_p)`,`E_p = 1/(1+10^((R_对手队均 − R_p)/400))`。`gen_golden.py` 用现有 Python 代码对固定输入生成期望值 JSON(双打 ELO 用**修复后**的期望值,在脚本里写明修复逻辑);vitest 逐条对齐。scheduler 移植模拟退火全部常数(iters=5000, T0=1.0, decay=0.995, floor=1e-4)与三种邻域操作;随机数用可注入 seed 的 PRNG(如 mulberry32),保证测试可复现。
   - verify: `cd web && python3 scripts/gen_golden.py && pnpm vitest run src/lib`
 
-- [ ] T3 数据层 + schema 迁移 + mock seed [顺序]
+- [x] T3 数据层 + schema 迁移 + mock seed [顺序]
   - 改动:`web/src/lib/db.ts`(新)、`web/src/lib/schema.sql`(新)、`web/scripts/migrate-legacy.ts`(新)、`web/scripts/seed-mock.ts`(新)、`web/src/lib/repo.ts`(新)、`web/src/lib/repo.test.ts`(新)
   - 要点:新 schema:`players(id, name UNIQUE, created_at)`;`matches(id, pa1, pa2, pb1, pb2, score_a, score_b, played_at, entered_by, created_at)` 全部用球员 id 外键。`db.ts` 用 better-sqlite3 打开 `process.env.DATABASE_URL`(默认 `./badminton.db`),启动时执行 `schema.sql`(IF NOT EXISTS)。`migrate-legacy.ts` 幂等:检测旧表结构(matches 里是 name 字符串)→ 建 players → name 映射 id 重写 matches → 旧表改名 `matches_legacy` 备份;用「legacy 是否已迁移」标记位防重复跑。`repo.ts` 是唯一数据访问层:`listPlayers/addPlayer/renamePlayer/mergePlayers/addMatch/listMatchesByDate/deleteMatch/getMatch/recomputeAllRatings`(全量重放,调 T2 的 elo/trueskill,结果存内存或直接算,不落缓存表)。`seed-mock.ts` 固定种子生成 10 球员 + 8 周约 150 场。
   - verify: `cd web && pnpm vitest run src/lib/repo.test.ts && pnpm tsx scripts/seed-mock.ts && sqlite3 "$(DATABASE_URL:-./badminton.db)" 'select count(*) from matches;'`(应 ≈150)

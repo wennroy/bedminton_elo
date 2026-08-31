@@ -1,0 +1,28 @@
+CREATE TABLE IF NOT EXISTS players (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT UNIQUE NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS matches (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  pa1 INTEGER NOT NULL,
+  pa2 INTEGER NOT NULL,
+  pb1 INTEGER NOT NULL,
+  pb2 INTEGER NOT NULL,
+  score_a INTEGER NOT NULL,
+  score_b INTEGER NOT NULL,
+  played_at TEXT NOT NULL,
+  entered_by INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (pa1) REFERENCES players(id),
+  FOREIGN KEY (pa2) REFERENCES players(id),
+  FOREIGN KEY (pb1) REFERENCES players(id),
+  FOREIGN KEY (pb2) REFERENCES players(id),
+  FOREIGN KEY (entered_by) REFERENCES players(id)
+);
+
+CREATE TABLE IF NOT EXISTS meta (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
