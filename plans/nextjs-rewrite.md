@@ -54,7 +54,7 @@
 
 ## Tasks
 
-- [ ] T1 Next.js 脚手架 + 应用骨架 [顺序]
+- [x] T1 Next.js 脚手架 + 应用骨架 [顺序]
   - 改动:`web/`(全新 Next.js 15 + TS + Tailwind + shadcn/ui 脚手架)、`web/src/components/identity-picker.tsx`(新)、`web/src/components/player-avatar.tsx`(新)、`web/src/components/bottom-nav.tsx`(新)、`web/src/lib/identity.ts`(新)、`web/src/app/layout.tsx`(新)、`web/src/app/page.tsx`(占位)
   - 要点:浅色主题;手机优先布局,底部导航(首页/记分/配对/周报/我的)。`identity.ts` 提供 `getMyPlayerId()/setMyPlayerId()` 读写 localStorage;`IdentityPicker` 首访弹窗列出球员网格(自动头像)点选;`PlayerAvatar` 用姓名首字 + 名字 hash 稳定配色。页面标题「卷技术小分队🏸」。
   - verify: `cd web && pnpm build && pnpm dev` [人工:手机尺寸视口下看骨架、导航、身份选择弹窗]
