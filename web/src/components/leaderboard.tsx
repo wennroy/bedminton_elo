@@ -3,7 +3,6 @@
 import * as React from "react";
 import Link from "next/link";
 import { PlayerAvatar } from "@/components/player-avatar";
-import { TodayMatches } from "@/components/today-matches";
 import { recomputeElos, INITIAL_RATING } from "@/lib/elo";
 import {
   recomputeTrueSkills,
@@ -37,7 +36,6 @@ interface MatchWithNames {
 interface LeaderboardProps {
   players: Player[];
   matches: MatchWithNames[];
-  todayMatches: MatchWithNames[];
 }
 
 type Tab = "elo" | "trueskill";
@@ -54,11 +52,7 @@ function toEloMatch(m: MatchWithNames) {
   };
 }
 
-export function Leaderboard({
-  players,
-  matches,
-  todayMatches,
-}: LeaderboardProps) {
+export function Leaderboard({ players, matches }: LeaderboardProps) {
   const [tab, setTab] = React.useState<Tab>("elo");
 
   const { eloRatings, tsPlayers, stats } = React.useMemo(() => {
@@ -116,11 +110,7 @@ export function Leaderboard({
   }, [players, eloRatings, tsPlayers, stats, tab]);
 
   return (
-    <div className="flex flex-col gap-6">
-      <header className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-foreground">排行榜</h1>
-      </header>
-
+    <div className="flex flex-col gap-4">
       <div className="inline-flex rounded-xl bg-muted p-1">
         <button
           onClick={() => setTab("elo")}
@@ -174,11 +164,6 @@ export function Leaderboard({
           </Link>
         ))}
       </div>
-
-      <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-bold text-foreground">当天比赛</h2>
-        <TodayMatches matches={todayMatches} />
-      </section>
     </div>
   );
 }

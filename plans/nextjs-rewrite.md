@@ -89,7 +89,12 @@
   - 要点:`weekly.ts` 按自然周(周一 00:00 起)聚合:出勤榜、战绩王(胜场最多)、ELO 涨跌榜、最佳组合(胜率最高且 ≥3 场)。周报页可切换历史周;「生成分享图」打开 `/api/og/weekly?week=YYYY-MM-DD`,用 next/og ImageResponse 输出 1080×1350 卡片(浅色风,标题「卷技术小分队🏸 第 N 周战报」)。
   - verify: `cd web && pnpm vitest run src/lib/weekly.test.ts && pnpm dev` [人工:mock 数据下看本周/上周周报,打开分享图链接确认渲染]
 
-- [x] T8 管理页 + Docker + 部署文档 [顺序](docker build 待 daemon 起来后补验)
+- [ ] T9 首页改版:趋势图 hero + 可收缩卡片 + 本周战绩 [顺序]
+  - 改动:`web/src/app/page.tsx`(改)、`web/src/components/collapsible-section.tsx`(新)、`web/src/components/home-trend.tsx`(新)、`web/src/components/week-matches.tsx`(新)、`web/src/components/leaderboard.tsx`(改,拆出纯榜单)
+  - 要点:趋势图置顶不折叠,高亮「我」的线(localStorage 身份),其他人灰色细线;筛选 chips:近2周/近4周/全部,默认近4周;已选身份时图表上方显示个人摘要(当前 ELO/本周涨跌/排名)。排行榜与本周战绩改为可收缩卡片,默认展开。本周战绩按天分组(周一为一周起点),保留 10 分钟撤回。
+  - verify: `cd web && pnpm exec tsc --noEmit && pnpm vitest run && pnpm build` [人工:首页视觉效果]
+
+- [x] T8 管理页 + Docker + 部署文档 [顺序]
   - 改动:`web/src/app/admin/page.tsx`(新)、`web/src/lib/admin.ts`(新)、`web/src/app/api/admin/**`(新)、`web/Dockerfile`(新)、`web/docker-compose.yml`(新)、`README.md`(改)
   - 要点:设置页输入 `ADMIN_PASSWORD` 后 localStorage 记住,请求带 `x-admin-key` 头;管理页可编辑/删除任意比赛、球员改名/合并(merge 把 B 的所有记录改指 A 后删 B)。Dockerfile:node:22-slim 多阶段(better-sqlite3 用预编译二进制,避免 alpine musl 编译),`DATABASE_URL=/data/badminton.db` 挂载卷,启动时先跑 `migrate-legacy.ts`。compose 暴露 `127.0.0.1:3000` 供 Apache 反代。README 写清:本地 `pnpm dev` → 测试 → push GitHub → 服务器 `git pull && docker compose up -d --build` → Apache ProxyPass 配置示例。
   - verify: `cd web && pnpm build && docker build -t bedminton-web . && docker run --rm -e ADMIN_PASSWORD=test -p 3000:3000 bedminton-web` [人工:容器起来后录一场 + 管理员删除一场]
