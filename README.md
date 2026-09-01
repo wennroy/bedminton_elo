@@ -49,15 +49,49 @@ npx tsx scripts/seed-mock.ts --force
 
 服务器需已安装 Docker 与 Docker Compose。
 
+### 0. 配置 Docker Hub 加速器(国内服务器必做)
+
+编辑 `/etc/docker/daemon.json`(没有就新建),加入腾讯云镜像加速器:
+
+```json
+{
+  "registry-mirrors": ["https://mirror.ccs.tencentyun.com"]
+}
+```
+
+```bash
+sudo systemctl restart docker
+```
+
+### 1. 拉代码并配置
+
 ```bash
 git pull
 cd web
 cp .env.example .env
-# 编辑 .env，设置 ADMIN_PASSWORD
-docker compose up -d --build
+# 编辑 .env,设置 ADMIN_PASSWORD
 ```
 
-数据卷挂载在 `web/data`，容器重启后数据持久化。
+### 2. 接入旧数据(重要)
+
+**先备份旧库**,再把它放到挂载目录:
+
+```bash
+cp /path/to/旧库/badminton.db ~/badminton.db.bak   # 备份
+mkdir -p data
+cp ~/badminton.db.bak data/badminton.db           # 旧库就位
+```
+
+容器启动时会自动运行 `migrate-legacy.ts`:检测到旧表结构(球员是姓名字符串)就幂等迁移到新 schema,旧表保留为 `matches_legacy` 备份。**迁移只迁双打记录**,单打行会跳过并打印数量。想用别的路径就在 `.env` 里改 `DATABASE_URL`。
+
+### 3. 构建并启动
+
+```bash
+docker compose up -d --build
+docker compose logs -f web   # 确认 migration 日志与启动成功
+```
+
+数据卷挂载在 `web/data`,容器重启后数据持久化。
 
 ## Apache 反向代理示例
 
