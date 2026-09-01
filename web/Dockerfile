@@ -6,7 +6,10 @@ RUN corepack enable
 
 FROM base AS deps
 WORKDIR /app
-COPY package.json pnpm-lock.yaml ./
+# better-sqlite3 prebuilt binary download may fail (GitHub releases unreachable);
+# fall back to source compile — needs the toolchain.
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
 FROM base AS builder
