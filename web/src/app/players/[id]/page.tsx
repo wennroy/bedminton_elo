@@ -3,10 +3,12 @@ import Link from "next/link";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { H2hTable } from "@/components/h2h-table";
 import { PlayerMatchHistory } from "@/components/player-match-history";
+import { FunStats } from "@/components/fun-stats";
 import { Button } from "@/components/ui/button";
 import {
   buildStatsData,
   headToHead,
+  playerFunStats,
   playerMatches,
   playerSummary,
 } from "@/lib/stats";
@@ -33,6 +35,7 @@ export default async function PlayerPage({ params }: PlayerPageProps) {
 
   const h2h = headToHead(playerId, data);
   const matches = playerMatches(playerId, data);
+  const funStats = playerFunStats(playerId, data);
 
   return (
     <main className="min-h-full bg-background px-4 pb-28 pt-4">
@@ -70,6 +73,11 @@ export default async function PlayerPage({ params }: PlayerPageProps) {
           {summary.totalMatches} 场 · {summary.wins} 胜 {summary.losses} 负 · {" "}
           {summary.winRate}%
         </div>
+      </section>
+
+      <section className="mb-6 flex flex-col gap-3">
+        <h3 className="text-lg font-bold text-foreground">趣味数据</h3>
+        <FunStats stats={funStats} />
       </section>
 
       <section className="mb-6 flex flex-col gap-3">

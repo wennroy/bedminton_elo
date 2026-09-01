@@ -49,6 +49,32 @@ export interface PlayerSummary {
   winRate: number;
 }
 
+export interface PlayerFunStats {
+  currentStreak: number;
+  currentStreakType: "win" | "loss" | "none";
+  longestWinStreak: number;
+  /** 搭档 ≥3 场中胜率最高者;不足为 null */
+  bestPartner: {
+    id: number;
+    name: string;
+    wins: number;
+    total: number;
+    winRate: number;
+  } | null;
+  /** 交手 ≥3 场中我方胜率最低者;不足为 null */
+  nemesis: {
+    id: number;
+    name: string;
+    wins: number;
+    losses: number;
+    total: number;
+    winRate: number;
+  } | null;
+  peakElo: number;
+  peakEloDate: string | null;
+  avgPointDiff: number;
+}
+
 export interface StatsData {
   players: Player[];
   matches: MatchWithNames[];
@@ -214,4 +240,127 @@ function teamIncludes(
 ): boolean {
   if (team === "A") return m.pa1 === playerId || m.pa2 === playerId;
   return m.pb1 === playerId || m.pb2 === playerId;
+}
+
+const MIN_PAIR_GAMES = 3;
+
+function nameOf(m: MatchWithNames, id: number): string {
+  if (id === m.pa1) return m.pa1Name;
+  if (id === m.pa2) return m.pa2Name;
+  if (id === m.pb1) return m.pb1Name;
+  return m.pb2Name;
+}
+
+/** data.matches 按 played_at/created_at/id 升序(listMatchesByDate 保证),可直接顺序扫描。 */
+export function playerFunStats(
+  playerId: number,
+  data: StatsData
+): PlayerFunStats {
+  let played = 0;
+  let diffSum = 0;
+  let longestWinStreak = 0;
+  let winRun = 0;
+  let currentStreak = 0;
+  let lastType: "win" | "loss" | "none" = "none";
+  const partners = new Map<number, { id: number; name: string; wins: number; total: number }>();
+  const opponents = new Map<
+    number,
+    { id: number; name: string; wins: number; losses: number; total: number }
+  >();
+
+  for (const m of data.matches) {
+    const inA = teamIncludes(m, playerId, "A");
+    const inB = teamIncludes(m, playerId, "B");
+    if (!inA && !inB) continue;
+    played++;
+
+    const aWon = m.scoreA > m.scoreB;
+    const won = (inA && aWon) || (inB && !aWon);
+    diffSum += inA ? m.scoreA - m.scoreB : m.scoreB - m.scoreA;
+
+    if (won) {
+      winRun++;
+      longestWinStreak = Math.max(longestWinStreak, winRun);
+    } else {
+      winRun = 0;
+    }
+    const type = won ? ("win" as const) : ("loss" as const);
+    currentStreak = type === lastType ? currentStreak + 1 : 1;
+    lastType = type;
+
+    const partnerId = inA
+      ? m.pa1 === playerId
+        ? m.pa2
+        : m.pa1
+      : m.pb1 === playerId
+        ? m.pb2
+        : m.pb1;
+    const partner = partners.get(partnerId) ?? {
+      id: partnerId,
+      name: nameOf(m, partnerId),
+      wins: 0,
+      total: 0,
+    };
+    partner.total++;
+    if (won) partner.wins++;
+    partners.set(partnerId, partner);
+
+    for (const oppId of inA ? [m.pb1, m.pb2] : [m.pa1, m.pa2]) {
+      const opp = opponents.get(oppId) ?? {
+        id: oppId,
+        name: nameOf(m, oppId),
+        wins: 0,
+        losses: 0,
+        total: 0,
+      };
+      opp.total++;
+      if (won) opp.wins++;
+      else opp.losses++;
+      opponents.set(oppId, opp);
+    }
+  }
+
+  const withRate = <T extends { wins: number; total: number }>(x: T) => ({
+    ...x,
+    winRate: Math.round((x.wins / x.total) * 100),
+  });
+
+  const bestPartner =
+    [...partners.values()]
+      .filter((p) => p.total >= MIN_PAIR_GAMES)
+      .sort((a, b) => b.wins / b.total - a.wins / a.total || b.total - a.total)
+      .map(withRate)[0] ?? null;
+
+  const nemesis =
+    [...opponents.values()]
+      .filter((o) => o.total >= MIN_PAIR_GAMES)
+      .sort((a, b) => a.wins / a.total - b.wins / b.total || b.total - a.total)
+      .map(withRate)[0] ?? null;
+
+  const history = data.eloHistory.filter(
+    (h) => h.playerId === String(playerId)
+  );
+  // eloHistory 按时间升序,第一个 ">" 即首次达成该峰值
+  let peakElo = Math.round(data.ratings.get(playerId)?.elo ?? INITIAL_RATING);
+  let peakEloDate: string | null = null;
+  if (history.length > 0) {
+    peakElo = -Infinity;
+    for (const h of history) {
+      if (h.elo > peakElo) {
+        peakElo = h.elo;
+        peakEloDate = h.date;
+      }
+    }
+  }
+
+  return {
+    currentStreak,
+    currentStreakType: lastType,
+    longestWinStreak,
+    bestPartner,
+    nemesis,
+    peakElo,
+    peakEloDate,
+    avgPointDiff: played > 0 ? Math.round((diffSum / played) * 10) / 10 : 0,
+  };
 }
