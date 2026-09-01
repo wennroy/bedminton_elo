@@ -41,12 +41,12 @@ function WeeklyCard({ weekStart }: WeeklyOGProps) {
         >
           🏸
         </div>
-        <div>
+        <div style={{ display: "flex", flexDirection: "column" }}>
           <div style={{ fontSize: "28px", color: "#6b7280" }}>
             卷技术小分队
           </div>
           <div style={{ fontSize: "56px", fontWeight: "bold" }}>
-            第 {stats.weekNumber} 周战报
+            {`第 ${stats.weekNumber} 周战报`}
           </div>
         </div>
       </div>
@@ -58,7 +58,7 @@ function WeeklyCard({ weekStart }: WeeklyOGProps) {
           color: "#6b7280",
         }}
       >
-        {stats.weekStart} ~ {stats.weekEnd}
+        {`${stats.weekStart} ~ ${stats.weekEnd}`}
       </div>
 
       <div
@@ -94,11 +94,10 @@ function WeeklyCard({ weekStart }: WeeklyOGProps) {
         >
           <div style={{ fontSize: "28px", opacity: 0.8 }}>最佳组合</div>
           <div style={{ fontSize: "48px", fontWeight: "bold" }}>
-            {stats.bestPair.playerA} / {stats.bestPair.playerB}
+            {`${stats.bestPair.playerA} / ${stats.bestPair.playerB}`}
           </div>
           <div style={{ fontSize: "32px" }}>
-            {stats.bestPair.wins} 胜 {stats.bestPair.total - stats.bestPair.wins} 负 · {" "}
-            {Math.round(stats.bestPair.winRate * 100)}%
+            {`${stats.bestPair.wins} 胜 ${stats.bestPair.total - stats.bestPair.wins} 负 · ${Math.round(stats.bestPair.winRate * 100)}%`}
           </div>
         </div>
       )}
