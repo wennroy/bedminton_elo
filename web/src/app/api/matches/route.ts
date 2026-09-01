@@ -4,11 +4,25 @@ import { getDb } from "@/lib/db";
 import {
   addMatch,
   listPlayers,
+  listMatchesByDate,
   recomputeAllRatings,
   type PlayerRatings,
 } from "@/lib/repo";
 
 const TEN_MINUTES = 10 * 60 * 1000;
+
+export const dynamic = "force-dynamic";
+
+export async function GET() {
+  try {
+    const db = getDb();
+    const matches = listMatchesByDate(db);
+    return NextResponse.json(matches);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
 
 interface PostBody {
   pa1: number;

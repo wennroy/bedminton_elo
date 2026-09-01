@@ -74,22 +74,22 @@
   - 要点:首页 = 排行榜(ELO/TrueSkill 切换 tabs,默认 ELO)+ 底部「当天比赛」列表(10 分钟内场次显示撤回按钮)。记分流程:选 4 人(头像网格,分 A/B 两队)→ 大号数字步进器输比分(默认 21:x,校验不相等)→ 提交 → `EloDeltaCard` 展示四人 ELO 涨跌(+动画)。POST 先写库再 `recomputeAllRatings`,响应带四人前后分数;DELETE 仅当 `Date.now() - created_at < 10min` 或带管理员口令。API 测试用临时 db 文件跑通 POST/DELETE/撤回窗口。
   - verify: `cd web && pnpm vitest run src/app/api/matches && pnpm dev` [人工:手机视口录一场 21:18,确认排行榜即时变化、EloDeltaCard 展示、10 分钟内可撤回]
 
-- [ ] T5 个人主页 + ELO 趋势图 + 2v2 胜率预测器 [独立]
+- [x] T5 个人主页 + ELO 趋势图 + 2v2 胜率预测器 [独立]
   - 改动:`web/src/app/players/[id]/page.tsx`(新)、`web/src/components/h2h-table.tsx`(新)、`web/src/app/trends/page.tsx`(新)、`web/src/components/elo-chart.tsx`(新)、`web/src/app/predict/page.tsx`(新)、`web/src/lib/stats.ts`(新)、`web/src/lib/stats.test.ts`(新)
   - 要点:`stats.ts` 提供 `headToHead(playerId)`(对每人胜-负)、`eloHistory()`(每日快照,供 Recharts 折线)、`playerSummary(playerId)`。个人主页:头像 + 当前双评分 + 参赛历史 + h2h 表。预测器页选 4 人,调 T2 的 `predict_elo`/`predict_trueskill` 移植版,展示两队胜率。
   - verify: `cd web && pnpm vitest run src/lib/stats.test.ts && pnpm dev` [人工:看个人主页 h2h、趋势图、预测器结果合理]
 
-- [ ] T6 配对生成页 [独立]
+- [x] T6 配对生成页 [独立]
   - 改动:`web/src/app/schedule/page.tsx`(新)、`web/src/app/api/schedule/route.ts`(新)
   - 要点:选在场球员(≥4,头像多选)+ 总场次 → 调 T2 `scheduler.ts` 生成配对表展示(每场可显示 TrueSkill 预测胜率)。「高级选项」折叠面板:随机种子、温度 λ。不写入任何待办表,生成即展示。
   - verify: `cd web && pnpm vitest run src/lib/scheduler.test.ts && pnpm dev` [人工:选 6 人 4 场,生成结果出场均衡]
 
-- [ ] T7 周报页 + 一键分享图 [独立]
+- [x] T7 周报页 + 一键分享图 [独立]
   - 改动:`web/src/app/weekly/page.tsx`(新)、`web/src/app/api/og/weekly/route.tsx`(新)、`web/src/lib/weekly.ts`(新)、`web/src/lib/weekly.test.ts`(新)
   - 要点:`weekly.ts` 按自然周(周一 00:00 起)聚合:出勤榜、战绩王(胜场最多)、ELO 涨跌榜、最佳组合(胜率最高且 ≥3 场)。周报页可切换历史周;「生成分享图」打开 `/api/og/weekly?week=YYYY-MM-DD`,用 next/og ImageResponse 输出 1080×1350 卡片(浅色风,标题「卷技术小分队🏸 第 N 周战报」)。
   - verify: `cd web && pnpm vitest run src/lib/weekly.test.ts && pnpm dev` [人工:mock 数据下看本周/上周周报,打开分享图链接确认渲染]
 
-- [ ] T8 管理页 + Docker + 部署文档 [顺序]
+- [x] T8 管理页 + Docker + 部署文档 [顺序](docker build 待 daemon 起来后补验)
   - 改动:`web/src/app/admin/page.tsx`(新)、`web/src/lib/admin.ts`(新)、`web/src/app/api/admin/**`(新)、`web/Dockerfile`(新)、`web/docker-compose.yml`(新)、`README.md`(改)
   - 要点:设置页输入 `ADMIN_PASSWORD` 后 localStorage 记住,请求带 `x-admin-key` 头;管理页可编辑/删除任意比赛、球员改名/合并(merge 把 B 的所有记录改指 A 后删 B)。Dockerfile:node:22-slim 多阶段(better-sqlite3 用预编译二进制,避免 alpine musl 编译),`DATABASE_URL=/data/badminton.db` 挂载卷,启动时先跑 `migrate-legacy.ts`。compose 暴露 `127.0.0.1:3000` 供 Apache 反代。README 写清:本地 `pnpm dev` → 测试 → push GitHub → 服务器 `git pull && docker compose up -d --build` → Apache ProxyPass 配置示例。
   - verify: `cd web && pnpm build && docker build -t bedminton-web . && docker run --rm -e ADMIN_PASSWORD=test -p 3000:3000 bedminton-web` [人工:容器起来后录一场 + 管理员删除一场]
