@@ -124,11 +124,31 @@ describe("repo", () => {
 
   it("migrates legacy schema idempotently", () => {
     const db = mkDb();
+    // Simulate the real legacy db: createDb() already ran schema.sql, but the
+    // legacy tables (incl. a `players` table with a DIFFERENT shape) shadow it.
     db.exec(`DROP TABLE IF EXISTS matches`);
+    db.exec(`DROP TABLE IF EXISTS players`);
     db.exec(`
       CREATE TABLE users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT UNIQUE
+      );
+      CREATE TABLE players (
+        user_id INTEGER PRIMARY KEY,
+        elo REAL,
+        FOREIGN KEY(user_id) REFERENCES users(id)
+      );
+      CREATE TABLE players_trueskill (user_id INTEGER PRIMARY KEY, mu REAL, sigma REAL);
+      CREATE TABLE pending_matches (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        player_a1 INTEGER, player_a2 INTEGER, player_b1 INTEGER, player_b2 INTEGER,
+        score_a INTEGER, score_b INTEGER, submitted BOOLEAN DEFAULT FALSE
+      );
+      CREATE TABLE optimization_results (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        seed INTEGER, alpha_var REAL, best_loss REAL,
+        mean_closeness REAL, max_closeness REAL, lambda_val REAL, entropy REAL
       );
       CREATE TABLE matches (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -142,6 +162,8 @@ describe("repo", () => {
         date TEXT
       );
       INSERT INTO users (name) VALUES ('张伟'), ('李娜'), ('王强'), ('刘洋');
+      INSERT INTO players (user_id, elo) VALUES (1, 1024.5), (2, 990.0), (3, 1010.2), (4, 975.3);
+      INSERT INTO players_trueskill (user_id, mu, sigma) VALUES (1, 26.0, 7.5), (2, 24.0, 8.0);
       INSERT INTO matches (match_type, player_a1, player_a2, player_b1, player_b2, score_a, score_b, date) VALUES
         ('双打', '张伟', '李娜', '王强', '刘洋', 21, 18, '2024-01-01'),
         ('单打', '张伟', NULL, '王强', NULL, 21, 19, '2024-01-02');
@@ -153,8 +175,21 @@ describe("repo", () => {
     expect(migrated[0].pa1Name).toBe("张伟");
     expect(migrated[0].playedAt).toBe("2024-01-01");
 
+    // New players table must have the new shape (id, name) — regression: the
+    // legacy players(user_id, elo) table used to shadow it and crash the insert.
+    const playerCols = db.prepare(`PRAGMA table_info(players)`).all() as Array<{ name: string }>;
+    expect(playerCols.map((c) => c.name)).toContain("name");
+    const players = db.prepare(`SELECT name FROM players ORDER BY name`).all() as Array<{ name: string }>;
+    expect(players.map((p) => p.name)).toEqual(["刘洋", "张伟", "李娜", "王强"]);
+
     const legacy = db.prepare(`SELECT COUNT(*) AS c FROM matches_legacy`).get() as { c: number };
     expect(legacy.c).toBe(2);
+    // All legacy tables preserved under renamed names.
+    for (const t of ["users_legacy", "players_legacy", "players_trueskill_legacy", "pending_matches_legacy", "optimization_results_legacy"]) {
+      expect(
+        db.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`).get(t)
+      ).toBeDefined();
+    }
 
     migrateLegacy(db);
     expect(listMatchesByDate(db)).toHaveLength(1);

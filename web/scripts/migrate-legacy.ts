@@ -55,17 +55,28 @@ function createNewMatchesTable(db: Database.Database): void {
   `);
 }
 
+// All table names used by the legacy Streamlit app. They collide with the new
+// schema (`players` exists in both with different shapes), so every one of them
+// must be renamed out of the way BEFORE creating the new tables.
+const LEGACY_TABLES = [
+  "matches",
+  "users",
+  "players",
+  "players_trueskill",
+  "pending_matches",
+  "optimization_results",
+] as const;
+
 export function migrateLegacy(db: Database.Database): void {
   if (isMigrated(db)) {
     console.log("Legacy migration already complete.");
     return;
   }
 
-  const oldTable = "matches";
   const hasOldMatches =
-    hasTable(db, oldTable) &&
-    hasColumn(db, oldTable, "match_type") &&
-    hasColumn(db, oldTable, "player_a1");
+    hasTable(db, "matches") &&
+    hasColumn(db, "matches", "match_type") &&
+    hasColumn(db, "matches", "player_a1");
 
   if (!hasOldMatches) {
     console.log("No legacy matches table detected; nothing to migrate.");
@@ -73,56 +84,79 @@ export function migrateLegacy(db: Database.Database): void {
     return;
   }
 
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS players (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT UNIQUE NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-  `);
-
-  const nameToId = new Map<string, number>();
-  if (hasTable(db, "users")) {
-    const userRows = db
-      .prepare(`SELECT id, name FROM users`)
-      .all() as Array<{ id: number; name: string }>;
-    for (const { name } of userRows) {
-      const result = db
-        .prepare(`INSERT OR IGNORE INTO players (name) VALUES (?)`)
-        .run(name);
-      const idRow = db
-        .prepare(`SELECT id FROM players WHERE name = ?`)
-        .get(name) as { id: number } | undefined;
-      if (idRow) {
-        nameToId.set(name, idRow.id);
-      }
-    }
-  }
-
-  const oldRows = db
-    .prepare(
-      `SELECT match_type, player_a1, player_a2, player_b1, player_b2, score_a, score_b, date FROM ${oldTable}`
-    )
-    .all() as Array<{
-      match_type: string;
-      player_a1: string;
-      player_a2: string | null;
-      player_b1: string;
-      player_b2: string | null;
-      score_a: number;
-      score_b: number;
-      date: string;
-    }>;
-
-  const skippedSingles: typeof oldRows = [];
+  let migratedCount = 0;
+  let skippedSingles = 0;
 
   const tx = db.transaction(() => {
-    db.exec(`ALTER TABLE ${oldTable} RENAME TO matches_legacy`);
+    // 1. Rename every legacy table out of the way first — legacy `players`
+    //    (user_id, elo) would otherwise shadow the new `players`(id, name).
+    for (const t of LEGACY_TABLES) {
+      if (hasTable(db, t)) {
+        db.exec(`ALTER TABLE ${t} RENAME TO ${t}_legacy`);
+      }
+    }
+
+    // 2. Create the new schema fresh.
+    db.exec(`
+      CREATE TABLE players (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
     createNewMatchesTable(db);
 
+    // 3. Seed players from users_legacy, plus any names appearing in
+    //    matches_legacy but missing from users (insurance against dropped rows).
+    const insertPlayer = db.prepare(
+      `INSERT OR IGNORE INTO players (name) VALUES (?)`
+    );
+    if (hasTable(db, "users_legacy")) {
+      const userRows = db
+        .prepare(`SELECT name FROM users_legacy`)
+        .all() as Array<{ name: string }>;
+      for (const { name } of userRows) {
+        insertPlayer.run(name);
+      }
+    }
+
+    const oldRows = db
+      .prepare(
+        `SELECT match_type, player_a1, player_a2, player_b1, player_b2, score_a, score_b, date FROM matches_legacy`
+      )
+      .all() as Array<{
+        match_type: string;
+        player_a1: string;
+        player_a2: string | null;
+        player_b1: string;
+        player_b2: string | null;
+        score_a: number;
+        score_b: number;
+        date: string;
+      }>;
+
+    for (const row of oldRows) {
+      for (const n of [row.player_a1, row.player_a2, row.player_b1, row.player_b2]) {
+        if (n) insertPlayer.run(n);
+      }
+    }
+
+    const nameToId = new Map<string, number>();
+    const playerRows = db
+      .prepare(`SELECT id, name FROM players`)
+      .all() as Array<{ id: number; name: string }>;
+    for (const { id, name } of playerRows) {
+      nameToId.set(name, id);
+    }
+
+    // 4. Copy doubles matches into the new table.
+    const insertMatch = db.prepare(
+      `INSERT INTO matches (pa1, pa2, pb1, pb2, score_a, score_b, played_at, entered_by, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)`
+    );
     for (const row of oldRows) {
       if (row.match_type !== "双打") {
-        skippedSingles.push(row);
+        skippedSingles += 1;
         continue;
       }
       const pa1 = nameToId.get(row.player_a1);
@@ -135,13 +169,11 @@ export function migrateLegacy(db: Database.Database): void {
         pb1 === undefined ||
         pb2 === undefined
       ) {
-        console.warn("Skipping row with unknown player:", row);
-        continue;
+        throw new Error(
+          `Legacy match references unknown player, aborting: ${JSON.stringify(row)}`
+        );
       }
-      db.prepare(
-        `INSERT INTO matches (pa1, pa2, pb1, pb2, score_a, score_b, played_at, entered_by, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)`
-      ).run(
+      insertMatch.run(
         pa1,
         pa2,
         pb1,
@@ -151,6 +183,7 @@ export function migrateLegacy(db: Database.Database): void {
         row.date,
         `${row.date}T12:00:00`
       );
+      migratedCount += 1;
     }
 
     markMigrated(db);
@@ -158,13 +191,13 @@ export function migrateLegacy(db: Database.Database): void {
 
   tx();
 
-  if (skippedSingles.length > 0) {
+  if (skippedSingles > 0) {
     console.log(
-      `WARNING: skipped ${skippedSingles.length} singles matches during legacy migration.`
+      `WARNING: skipped ${skippedSingles} singles matches during legacy migration.`
     );
   }
   console.log(
-    `Legacy migration complete. Migrated ${oldRows.length - skippedSingles.length} doubles matches.`
+    `Legacy migration complete. Migrated ${migratedCount} doubles matches.`
   );
 }
 
