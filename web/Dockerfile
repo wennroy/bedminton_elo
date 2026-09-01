@@ -11,7 +11,9 @@ FROM base AS deps
 WORKDIR /app
 # better-sqlite3 prebuilt binary download may fail (GitHub releases unreachable);
 # fall back to source compile — needs the toolchain.
-RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
+# Debian 源也切腾讯云镜像,否则国内 apt-get 极慢
+RUN sed -i 's|deb.debian.org|mirrors.cloud.tencent.com|g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
