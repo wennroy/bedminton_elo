@@ -69,7 +69,7 @@
   - 要点:新 schema:`players(id, name UNIQUE, created_at)`;`matches(id, pa1, pa2, pb1, pb2, score_a, score_b, played_at, entered_by, created_at)` 全部用球员 id 外键。`db.ts` 用 better-sqlite3 打开 `process.env.DATABASE_URL`(默认 `./badminton.db`),启动时执行 `schema.sql`(IF NOT EXISTS)。`migrate-legacy.ts` 幂等:检测旧表结构(matches 里是 name 字符串)→ 建 players → name 映射 id 重写 matches → 旧表改名 `matches_legacy` 备份;用「legacy 是否已迁移」标记位防重复跑。`repo.ts` 是唯一数据访问层:`listPlayers/addPlayer/renamePlayer/mergePlayers/addMatch/listMatchesByDate/deleteMatch/getMatch/recomputeAllRatings`(全量重放,调 T2 的 elo/trueskill,结果存内存或直接算,不落缓存表)。`seed-mock.ts` 固定种子生成 10 球员 + 8 周约 150 场。
   - verify: `cd web && pnpm vitest run src/lib/repo.test.ts && pnpm tsx scripts/seed-mock.ts && sqlite3 "$(DATABASE_URL:-./badminton.db)" 'select count(*) from matches;'`(应 ≈150)
 
-- [ ] T4 核心闭环:首页排行榜 + 快速记分 + 当天比赛 + 10 分钟撤回 [顺序]
+- [x] T4 核心闭环:首页排行榜 + 快速记分 + 当天比赛 + 10 分钟撤回 [顺序]
   - 改动:`web/src/app/page.tsx`(改)、`web/src/app/record/page.tsx`(新)、`web/src/app/api/matches/route.ts`(新,POST/DELETE)、`web/src/app/api/matches/[id]/route.ts`(新)、`web/src/components/leaderboard.tsx`(新)、`web/src/components/record-form.tsx`(新)、`web/src/components/elo-delta-card.tsx`(新)、`web/src/app/api/matches/route.test.ts`(新)
   - 要点:首页 = 排行榜(ELO/TrueSkill 切换 tabs,默认 ELO)+ 底部「当天比赛」列表(10 分钟内场次显示撤回按钮)。记分流程:选 4 人(头像网格,分 A/B 两队)→ 大号数字步进器输比分(默认 21:x,校验不相等)→ 提交 → `EloDeltaCard` 展示四人 ELO 涨跌(+动画)。POST 先写库再 `recomputeAllRatings`,响应带四人前后分数;DELETE 仅当 `Date.now() - created_at < 10min` 或带管理员口令。API 测试用临时 db 文件跑通 POST/DELETE/撤回窗口。
   - verify: `cd web && pnpm vitest run src/app/api/matches && pnpm dev` [人工:手机视口录一场 21:18,确认排行榜即时变化、EloDeltaCard 展示、10 分钟内可撤回]

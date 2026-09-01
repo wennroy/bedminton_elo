@@ -1,48 +1,34 @@
-"use client";
+import { listPlayers, listMatchesByDate, type MatchWithNames } from "@/lib/repo";
+import { Leaderboard } from "@/components/leaderboard";
 
-import * as React from "react";
-import { getMyPlayerId } from "@/lib/identity";
-import { IdentityPicker } from "@/components/identity-picker";
-import { PlayerAvatar } from "@/components/player-avatar";
+export const dynamic = "force-dynamic";
 
-const MOCK_PLAYERS = [
-  { id: 1, name: "陈雨菲" },
-  { id: 2, name: "郑思维" },
-  { id: 3, name: "黄雅琼" },
-  { id: 4, name: "石宇奇" },
-  { id: 5, name: "凡晨组合" },
-  { id: 6, name: "李俊慧" },
-  { id: 7, name: "刘雨辰" },
-  { id: 8, name: "何冰娇" },
-];
+function getTodayString(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
 
-export default function HomePage() {
-  const [myId, setMyId] = React.useState<number | null>(null);
-
-  React.useEffect(() => {
-    setMyId(getMyPlayerId());
-  }, []);
-
-  const myName = React.useMemo(
-    () => MOCK_PLAYERS.find((p) => p.id === myId)?.name,
-    [myId]
-  );
+export default async function HomePage() {
+  const players = listPlayers();
+  const matches = listMatchesByDate();
+  const today = getTodayString();
+  const todayMatches = matches
+    .filter((m): m is MatchWithNames => m.playedAt === today)
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
 
   return (
-    <main className="flex min-h-full flex-col items-center justify-center px-6 text-center">
-      <IdentityPicker players={MOCK_PLAYERS} onSelect={setMyId} />
-
-      <h1 className="text-3xl font-bold tracking-tight">卷技术小分队🏸</h1>
-      <p className="mt-2 text-muted-foreground">首页（排行榜）占位</p>
-
-      {myName ? (
-        <div className="mt-8 flex flex-col items-center gap-2">
-          <PlayerAvatar name={myName} size="lg" />
-          <p className="text-lg font-medium">当前身份：{myName}</p>
-        </div>
-      ) : (
-        <p className="mt-8 text-sm text-muted-foreground">请选择你的身份</p>
-      )}
+    <main className="min-h-full bg-background px-4 pb-28 pt-4">
+      <Leaderboard
+        players={players}
+        matches={matches}
+        todayMatches={todayMatches}
+      />
     </main>
   );
 }
