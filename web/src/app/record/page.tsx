@@ -1,6 +1,10 @@
 import { listPlayers } from "@/lib/repo";
 import { RecordForm } from "@/components/record-form";
 
+// Players live in the runtime sqlite db — prerendering at build time would
+// bake an empty player list into the static HTML.
+export const dynamic = "force-dynamic";
+
 export default async function RecordPage() {
   const players = listPlayers();
 
