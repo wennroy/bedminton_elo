@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { H2hTable } from "@/components/h2h-table";
+import { PlayerMatchHistory } from "@/components/player-match-history";
 import { Button } from "@/components/ui/button";
 import {
   buildStatsData,
@@ -78,42 +79,7 @@ export default async function PlayerPage({ params }: PlayerPageProps) {
 
       <section className="flex flex-col gap-3">
         <h3 className="text-lg font-bold text-foreground">参赛历史</h3>
-        {matches.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
-            还没有参赛记录
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {matches.map((m) => (
-              <div
-                key={m.id}
-                className="rounded-2xl border border-border bg-card p-3 shadow-sm"
-              >
-                <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
-                  <span>{m.date}</span>
-                  <span className={m.won ? "text-emerald-600" : "text-rose-600"}>
-                    {m.won ? "胜" : "负"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex flex-1 flex-col gap-1 text-sm">
-                    <div className="flex items-center gap-1 text-card-foreground">
-                      <span className="font-medium">
-                        {summary.name} / {m.teammates.join(" / ")}
-                      </span>
-                    </div>
-                    <div className="text-muted-foreground">
-                      VS {m.opponents.join(" / ")}
-                    </div>
-                  </div>
-                  <div className="text-lg font-bold tabular-nums text-card-foreground">
-                    {m.scoreFor} : {m.scoreAgainst}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        <PlayerMatchHistory matches={matches} playerName={summary.name} />
       </section>
     </main>
   );
