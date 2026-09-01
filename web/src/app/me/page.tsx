@@ -38,6 +38,11 @@ export default function MePage() {
   function handleSelect(id: number) {
     setMyPlayerId(id);
     setMyId(id);
+    // The selection may be a just-added player not yet in our local list.
+    fetch("/api/players")
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then((data: Player[]) => setPlayers(data))
+      .catch(() => {});
   }
 
   return (
