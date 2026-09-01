@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { TodayMatches } from "@/components/today-matches";
 import { recomputeElos, INITIAL_RATING } from "@/lib/elo";
@@ -145,9 +146,10 @@ export function Leaderboard({
 
       <div className="space-y-2">
         {rows.map((row, index) => (
-          <div
+          <Link
             key={row.id}
-            className="flex items-center gap-3 rounded-2xl border border-border bg-card p-3 shadow-sm"
+            href={`/players/${row.id}`}
+            className="flex items-center gap-3 rounded-2xl border border-border bg-card p-3 shadow-sm transition-colors hover:bg-muted/30"
           >
             <div className="flex w-8 justify-center text-lg font-bold text-muted-foreground">
               {index + 1}
@@ -169,7 +171,7 @@ export function Leaderboard({
                 {tab === "trueskill" && "μ-3σ"}
               </div>
             </div>
-          </div>
+          </Link>
         ))}
       </div>
 
