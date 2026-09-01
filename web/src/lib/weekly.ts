@@ -5,6 +5,8 @@ import {
 } from "@/lib/repo";
 import { recomputeElos, INITIAL_RATING, type Match as EloMatch } from "@/lib/elo";
 
+export type { MatchWithNames };
+
 export interface WeeklyPlayerStat {
   playerId: number;
   name: string;
