@@ -23,6 +23,8 @@ interface Player {
 
 interface RecordFormProps {
   players: Player[];
+  /** 配对页跳转带来的预填阵容(A1,A2,B1,B2),缺省全空 */
+  initialSlots?: [Slot, Slot, Slot, Slot];
 }
 
 type Slot = number | null;
@@ -35,15 +37,12 @@ function todayString(): string {
   return `${y}-${m}-${day}`;
 }
 
-export function RecordForm({ players }: RecordFormProps) {
+export function RecordForm({ players, initialSlots }: RecordFormProps) {
   const router = useRouter();
   const [myId, setMyId] = React.useState<number | null>(null);
-  const [slots, setSlots] = React.useState<[Slot, Slot, Slot, Slot]>([
-    null,
-    null,
-    null,
-    null,
-  ]);
+  const [slots, setSlots] = React.useState<[Slot, Slot, Slot, Slot]>(
+    initialSlots ?? [null, null, null, null]
+  );
   const [scoreA, setScoreA] = React.useState(21);
   const [scoreB, setScoreB] = React.useState(0);
   const [submitting, setSubmitting] = React.useState(false);

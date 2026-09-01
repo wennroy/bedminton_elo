@@ -1,33 +1,21 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronUp, RotateCcw, Sparkles } from "lucide-react";
+import { getMyPlayerId } from "@/lib/identity";
+import {
+  clearSchedule,
+  loadSchedule,
+  saveSchedule,
+  type ScheduleResult,
+} from "@/lib/schedule-storage";
+import { ChevronDown, ChevronRight, ChevronUp, RotateCcw, Sparkles } from "lucide-react";
 
 interface Player {
   id: number;
   name: string;
-}
-
-interface ScheduledMatch {
-  a1: string;
-  a2: string;
-  b1: string;
-  b2: string;
-  winRate: number;
-}
-
-interface ScheduleResult {
-  schedule: ScheduledMatch[];
-  metrics: {
-    alphaVar: number;
-    bestLoss: number;
-    meanCloseness: number;
-    maxCloseness: number;
-    entropy: number;
-  };
-  names: Record<string, string>;
 }
 
 interface ScheduleFormProps {
@@ -44,6 +32,17 @@ export function ScheduleForm({ players }: ScheduleFormProps) {
   const [result, setResult] = React.useState<ScheduleResult | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
+  // 按当前身份恢复上次生成的配对(只有「清空」或再次「生成配对」才刷新)
+  React.useEffect(() => {
+    const stored = loadSchedule(getMyPlayerId());
+    if (!stored) return;
+    setSelected(new Set(stored.playerIds));
+    setMatches(stored.matches);
+    setSeed(stored.seed);
+    setLambda(stored.lambda);
+    setResult(stored.result);
+  }, []);
+
   const canGenerate = selected.size >= 4 && matches >= 1;
 
   function toggle(id: number) {
@@ -59,6 +58,7 @@ export function ScheduleForm({ players }: ScheduleFormProps) {
   function clear() {
     setSelected(new Set());
     setResult(null);
+    clearSchedule(getMyPlayerId());
   }
 
   async function handleGenerate() {
@@ -83,6 +83,14 @@ export function ScheduleForm({ players }: ScheduleFormProps) {
         return;
       }
       setResult(data);
+      saveSchedule(getMyPlayerId(), {
+        playerIds: Array.from(selected),
+        matches,
+        seed,
+        lambda,
+        result: data,
+        savedAt: new Date().toISOString(),
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "生成失败");
     } finally {
@@ -235,23 +243,32 @@ export function ScheduleForm({ players }: ScheduleFormProps) {
 function ScheduleResultView({ result }: { result: ScheduleResult }) {
   return (
     <div className="flex flex-col gap-4">
-      <h2 className="text-lg font-bold text-foreground">生成结果</h2>
+      <div className="flex items-baseline justify-between">
+        <h2 className="text-lg font-bold text-foreground">生成结果</h2>
+        <span className="text-xs text-muted-foreground">
+          点击场次卡片直接记分
+        </span>
+      </div>
       <div className="space-y-3">
         {result.schedule.map((match, index) => (
-          <div
+          <Link
             key={index}
-            className="rounded-2xl border border-border bg-card p-3 shadow-sm"
+            href={`/record?pa1=${match.a1}&pa2=${match.a2}&pb1=${match.b1}&pb2=${match.b2}`}
+            className="block rounded-2xl border border-border bg-card p-3 shadow-sm transition-colors hover:border-primary/50 hover:bg-muted/30"
           >
             <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
               <span>第 {index + 1} 场</span>
-              <span>A 队胜率 {Math.round(match.winRate * 100)}%</span>
+              <span className="flex items-center gap-1">
+                A 队胜率 {Math.round(match.winRate * 100)}%
+                <ChevronRight className="size-3" />
+              </span>
             </div>
             <div className="flex items-center justify-between gap-2">
               <TeamView ids={[match.a1, match.a2]} names={result.names} />
               <span className="text-sm font-bold text-muted-foreground">VS</span>
               <TeamView ids={[match.b1, match.b2]} names={result.names} />
             </div>
-          </div>
+          </Link>
         ))}
       </div>
 
