@@ -281,7 +281,7 @@ export function HomeTrend({ history, summaries }: HomeTrendProps) {
               const pid = Number(playerId);
               const isMe = myId !== null && pid === myId;
               const isSelected = selected?.has(pid) ?? false;
-              const colored = mode === "rank" || isSelected;
+              const colored = isSelected;
               return (
                 <Line
                   key={playerId}
@@ -307,38 +307,42 @@ export function HomeTrend({ history, summaries }: HomeTrendProps) {
         </ResponsiveContainer>
       </div>
 
-      {mode === "compare" && (
-        <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
-          <button
-            type="button"
-            onClick={() =>
-              setSelected(new Set(allPlayers.map(([id]) => Number(id))))
-            }
-            className="flex shrink-0 items-center rounded-full border border-border px-3 py-1 text-xs text-muted-foreground"
-          >
-            全选
-          </button>
-          {allPlayers.map(([playerId, playerName]) => {
-            const pid = Number(playerId);
-            const isSelected = selected?.has(pid) ?? false;
-            return (
-              <button
-                key={playerId}
-                type="button"
-                onClick={() => togglePlayer(pid)}
-                className={`flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-1 text-xs transition-all ${
-                  isSelected
-                    ? "border-primary bg-primary/10 text-foreground"
-                    : "border-border text-muted-foreground opacity-50"
-                }`}
-              >
-                <PlayerAvatar name={playerName} size="xs" />
-                {playerName}
-              </button>
-            );
-          })}
-        </div>
-      )}
+      <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+        <button
+          type="button"
+          onClick={() =>
+            setSelected((prev) =>
+              prev !== null && prev.size === allPlayers.length
+                ? new Set() // 已是全选 → 取消全选
+                : new Set(allPlayers.map(([id]) => Number(id)))
+            )
+          }
+          className="flex shrink-0 items-center rounded-full border border-border px-3 py-1 text-xs text-muted-foreground"
+        >
+          {selected !== null && selected.size === allPlayers.length
+            ? "取消全选"
+            : "全选"}
+        </button>
+        {allPlayers.map(([playerId, playerName]) => {
+          const pid = Number(playerId);
+          const isSelected = selected?.has(pid) ?? false;
+          return (
+            <button
+              key={playerId}
+              type="button"
+              onClick={() => togglePlayer(pid)}
+              className={`flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-1 text-xs transition-all ${
+                isSelected
+                  ? "border-primary bg-primary/10 text-foreground"
+                  : "border-border text-muted-foreground opacity-50"
+              }`}
+            >
+              <PlayerAvatar name={playerName} size="xs" />
+              {playerName}
+            </button>
+          );
+        })}
+      </div>
     </section>
   );
 }
