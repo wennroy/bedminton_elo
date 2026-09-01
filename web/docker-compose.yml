@@ -2,7 +2,7 @@ services:
   web:
     build: .
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:${PORT:-8503}:3000"
     environment:
       - DATABASE_URL=${DATABASE_URL:-/data/badminton.db}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}

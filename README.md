@@ -93,17 +93,21 @@ docker compose logs -f web   # 确认 migration 日志与启动成功
 
 数据卷挂载在 `web/data`,容器重启后数据持久化。
 
+### 4. 从旧 Streamlit 切换
+
+新版默认监听 `127.0.0.1:8503`(与现有 Apache 配置一致,Apache 无需改动)。切换时先停掉旧 Streamlit 释放 8503 端口,再 `docker compose up -d --build`。要换端口在 `.env` 里设 `PORT`。
+
 ## Apache 反向代理示例
 
-假设应用监听 `127.0.0.1:3000`，Apache 配置片段：
+假设应用监听 `127.0.0.1:8503`，Apache 配置片段：
 
 ```apache
 <VirtualHost *:80>
     ServerName badminton.example.com
 
     ProxyPreserveHost On
-    ProxyPass / http://127.0.0.1:3000/
-    ProxyPassReverse / http://127.0.0.1:3000/
+    ProxyPass / http://127.0.0.1:8503/
+    ProxyPassReverse / http://127.0.0.1:8503/
 
     # Next.js 不使用 WebSocket，无需额外 ws 代理
 </VirtualHost>
