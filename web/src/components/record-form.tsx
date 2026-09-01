@@ -7,7 +7,14 @@ import { PlayerAvatar } from "@/components/player-avatar";
 import { IdentityPicker } from "@/components/identity-picker";
 import { EloDeltaCard, type EloDeltaPlayer } from "@/components/elo-delta-card";
 import { Button } from "@/components/ui/button";
-import { Minus, Plus, RotateCcw, Trophy } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Minus, Plus, RotateCcw, Trophy, UserPlus } from "lucide-react";
 
 interface Player {
   id: number;
@@ -42,6 +49,10 @@ export function RecordForm({ players }: RecordFormProps) {
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [result, setResult] = React.useState<EloDeltaPlayer[] | null>(null);
+  const [addOpen, setAddOpen] = React.useState(false);
+  const [addName, setAddName] = React.useState("");
+  const [addError, setAddError] = React.useState<string | null>(null);
+  const [adding, setAdding] = React.useState(false);
 
   React.useEffect(() => {
     setMyId(getMyPlayerId());
@@ -134,6 +145,35 @@ export function RecordForm({ players }: RecordFormProps) {
     router.refresh();
   }
 
+  // Courtside case: recorder adds someone ELSE, so identity stays untouched.
+  async function handleAddPlayer(event: React.FormEvent) {
+    event.preventDefault();
+    const name = addName.trim();
+    if (!name || adding) return;
+    setAdding(true);
+    setAddError(null);
+    try {
+      const res = await fetch("/api/players", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setAddError(data.error || "添加失败");
+        return;
+      }
+      setAddOpen(false);
+      setAddName("");
+      // Re-fetch server props so the new player appears in the grid below.
+      router.refresh();
+    } catch {
+      setAddError("网络错误，请重试");
+    } finally {
+      setAdding(false);
+    }
+  }
+
   const teamAScoreColor = scoreA > scoreB ? "text-emerald-600" : scoreA < scoreB ? "text-rose-600" : "text-foreground";
   const teamBScoreColor = scoreB > scoreA ? "text-emerald-600" : scoreB < scoreA ? "text-rose-600" : "text-foreground";
 
@@ -202,8 +242,47 @@ export function RecordForm({ players }: RecordFormProps) {
               </button>
             );
           })}
+          <button
+            onClick={() => setAddOpen(true)}
+            className="flex flex-col items-center gap-1 rounded-xl border border-dashed border-border p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
+              <UserPlus className="size-4" />
+            </span>
+            <span className="text-xs font-medium">新球员</span>
+          </button>
         </div>
       </div>
+
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>添加新球员</DialogTitle>
+            <DialogDescription>
+              添加后TA就会出现在阵容列表里，不会改变你自己的身份。
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleAddPlayer} className="flex flex-col gap-3 pt-2">
+            <input
+              autoFocus
+              value={addName}
+              onChange={(e) => {
+                setAddName(e.target.value);
+                setAddError(null);
+              }}
+              maxLength={20}
+              placeholder="输入名字"
+              className="h-12 w-full rounded-xl border border-border bg-background px-4 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+            {addError && (
+              <p className="text-sm text-destructive">{addError}</p>
+            )}
+            <Button type="submit" disabled={adding || !addName.trim()}>
+              {adding ? "添加中…" : "确认添加"}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
         <h2 className="mb-4 font-semibold text-card-foreground">比分</h2>

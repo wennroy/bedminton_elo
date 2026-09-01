@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { getMyPlayerId, setMyPlayerId } from "@/lib/identity";
 import { IdentityPicker } from "@/components/identity-picker";
+import { PlayerAvatar } from "@/components/player-avatar";
 import { Shield, ChevronRight } from "lucide-react";
 
 interface Player {
@@ -57,12 +58,27 @@ export default function MePage() {
           <div className="text-sm text-destructive">{error}</div>
         ) : (
           <>
-            <IdentityPicker players={players} onSelect={handleSelect} />
-            {myId && (
-              <p className="text-xs text-muted-foreground">
-                已选择：{players.find((p) => p.id === myId)?.name || "未知"}
-              </p>
-            )}
+            <IdentityPicker
+              players={players}
+              onSelect={handleSelect}
+              trigger={
+                <button className="flex items-center gap-3 rounded-xl border border-border bg-background p-3 text-left transition-colors hover:bg-muted">
+                  <PlayerAvatar
+                    name={players.find((p) => p.id === myId)?.name || "?"}
+                    size="sm"
+                  />
+                  <div className="flex flex-1 flex-col">
+                    <span className="font-medium text-card-foreground">
+                      {players.find((p) => p.id === myId)?.name || "未选择"}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      点这里更换身份或添加新球员
+                    </span>
+                  </div>
+                  <ChevronRight className="size-4 text-muted-foreground" />
+                </button>
+              }
+            />
           </>
         )}
       </section>

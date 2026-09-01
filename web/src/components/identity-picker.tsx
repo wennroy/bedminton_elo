@@ -13,14 +13,17 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 
 interface IdentityPickerProps {
   players: { id: number; name: string }[];
   onSelect?: (id: number) => void;
+  /** Optional trigger to reopen the picker (e.g. 更换身份 button on /me). */
+  trigger?: React.ReactNode;
 }
 
-export function IdentityPicker({ players, onSelect }: IdentityPickerProps) {
+export function IdentityPicker({ players, onSelect, trigger }: IdentityPickerProps) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [selectedId, setSelectedId] = React.useState<number | null>(null);
@@ -85,6 +88,7 @@ export function IdentityPicker({ players, onSelect }: IdentityPickerProps) {
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
+      {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
       <DialogContent showCloseButton={false} className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{adding ? "添加新球员" : "你是谁？"}</DialogTitle>
