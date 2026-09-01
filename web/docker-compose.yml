@@ -8,4 +8,6 @@ services:
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
     volumes:
       - ./data:/data
+      # 更新日志页运行时读取仓库根目录的 CHANGELOG.md
+      - ../CHANGELOG.md:/app/CHANGELOG.md:ro
     restart: unless-stopped
