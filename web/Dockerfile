@@ -2,6 +2,9 @@
 FROM node:22-slim AS base
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
+# 国内服务器:npm 安装与 corepack 下载 pnpm 都走 npmmirror
+ENV npm_config_registry=https://registry.npmmirror.com
+ENV COREPACK_NPM_REGISTRY=https://registry.npmmirror.com
 RUN corepack enable
 
 FROM base AS deps
