@@ -40,3 +40,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .next-dev/
+
+# 模板文件需要入库
+!.env.example
