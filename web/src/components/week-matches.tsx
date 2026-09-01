@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { PlayerAvatar } from "@/components/player-avatar";
+import { formatMatchMeta } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Undo2 } from "lucide-react";
 
@@ -153,7 +154,11 @@ export function WeekMatches({ matches }: WeekMatchesProps) {
                     </div>
                   </div>
                   <div className="mt-1.5 text-xs text-muted-foreground">
-                    录入:{enteredByLabel(match)}
+                    {formatMatchMeta(
+                      match.playedAt,
+                      match.createdAt,
+                      enteredByLabel(match)
+                    )}
                   </div>
                 </div>
               );
