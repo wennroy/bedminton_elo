@@ -26,12 +26,12 @@ interface HomeTrendProps {
   summaries: Record<number, PlayerSummaryLite>;
 }
 
-type RangeKey = "2w" | "4w" | "all";
+type RangeKey = "4w" | "12w" | "all";
 type Mode = "compare" | "rank";
 
 const RANGES: { key: RangeKey; label: string; days: number | null }[] = [
-  { key: "2w", label: "近2周", days: 14 },
   { key: "4w", label: "近4周", days: 28 },
+  { key: "12w", label: "近12周", days: 84 },
   { key: "all", label: "全部", days: null },
 ];
 
@@ -272,6 +272,13 @@ export function HomeTrend({ history, summaries }: HomeTrendProps) {
                 marginBottom: "0.25rem",
               }}
               itemStyle={{ color: "var(--foreground)" }}
+              itemSorter={(item) => {
+                // 排名模式按名次升序,对比模式按 ELO 降序;
+                // connectNulls 缺口日 value 可能为 undefined,兜底排到末尾避免 NaN
+                const v = Number(item.value);
+                if (Number.isNaN(v)) return Infinity;
+                return mode === "rank" ? v : -v;
+              }}
               formatter={(value, name) => [
                 mode === "rank" ? `第 ${value} 名` : String(value),
                 String(name),
