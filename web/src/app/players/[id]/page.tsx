@@ -63,9 +63,13 @@ export default async function PlayerPage({ params }: PlayerPageProps) {
           <div className="flex flex-1 flex-col items-center rounded-xl bg-muted p-3">
             <span className="text-xs text-muted-foreground">TrueSkill</span>
             <span className="text-xl font-bold tabular-nums text-card-foreground">
-              {Math.round(summary.tsScore)}
+              {Math.round(summary.mu)}
             </span>
-            <span className="text-[10px] text-muted-foreground">μ-3σ</span>
+            <span className="text-[10px] text-muted-foreground">
+              σ {summary.sigma.toFixed(1)} · 区间 [
+              {Math.round(summary.mu - 3 * summary.sigma)},{" "}
+              {Math.round(summary.mu + 3 * summary.sigma)}]
+            </span>
           </div>
         </div>
         <div className="flex items-center gap-1 text-sm text-muted-foreground">

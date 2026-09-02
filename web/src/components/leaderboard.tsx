@@ -91,13 +91,13 @@ export function Leaderboard({ players, matches }: LeaderboardProps) {
         const ts = tsPlayers[String(player.id)];
         const stat = stats.get(player.id) ?? { total: 0, wins: 0 };
         const elo = eloRatings[String(player.id)] ?? INITIAL_RATING;
-        const tsScore = ts
-          ? ts.mu - 3 * ts.sigma
-          : TS_MU - 3 * TS_SIGMA;
+        const mu = ts ? ts.mu : TS_MU;
+        const sigma = ts ? ts.sigma : TS_SIGMA;
         return {
           ...player,
           elo,
-          tsScore,
+          mu,
+          sigma,
           total: stat.total,
           wins: stat.wins,
           winRate: stat.total > 0 ? Math.round((stat.wins / stat.total) * 100) : 0,
@@ -105,7 +105,7 @@ export function Leaderboard({ players, matches }: LeaderboardProps) {
       })
       .sort((a, b) => {
         if (tab === "elo") return b.elo - a.elo;
-        return b.tsScore - a.tsScore;
+        return b.mu - a.mu;
       });
   }, [players, eloRatings, tsPlayers, stats, tab]);
 
@@ -155,10 +155,10 @@ export function Leaderboard({ players, matches }: LeaderboardProps) {
             </div>
             <div className="text-right">
               <div className="text-xl font-bold tabular-nums text-card-foreground">
-                {Math.round(tab === "elo" ? row.elo : row.tsScore)}
+                {Math.round(tab === "elo" ? row.elo : row.mu)}
               </div>
               <div className="text-[10px] text-muted-foreground">
-                {tab === "trueskill" && "μ-3σ"}
+                {tab === "trueskill" && `±${row.sigma.toFixed(1)}`}
               </div>
             </div>
           </Link>

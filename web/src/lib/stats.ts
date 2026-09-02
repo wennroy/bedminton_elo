@@ -42,7 +42,8 @@ export interface PlayerSummary {
   id: number;
   name: string;
   elo: number;
-  tsScore: number;
+  mu: number;
+  sigma: number;
   totalMatches: number;
   wins: number;
   losses: number;
@@ -225,7 +226,8 @@ export function playerSummary(
     id: playerId,
     name: player.name,
     elo: rating?.elo ?? INITIAL_RATING,
-    tsScore: ts ? ts.mu - 3 * ts.sigma : TS_MU - 3 * TS_SIGMA,
+    mu: ts?.mu ?? TS_MU,
+    sigma: ts?.sigma ?? TS_SIGMA,
     totalMatches: total,
     wins,
     losses: total - wins,
