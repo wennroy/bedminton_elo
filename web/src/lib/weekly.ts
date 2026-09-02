@@ -3,7 +3,7 @@ import {
   listMatchesByDate,
   type MatchWithNames,
 } from "@/lib/repo";
-import { recomputeElos, INITIAL_RATING, type Match as EloMatch } from "@/lib/elo";
+import { recomputeElos, computeMatchWinProbs, INITIAL_RATING, type Match as EloMatch } from "@/lib/elo";
 
 export type { MatchWithNames };
 
@@ -31,6 +31,31 @@ export interface BestPair {
   winRate: number;
 }
 
+export interface FunMatch {
+  date: string;
+  teamA: [string, string];
+  teamB: [string, string];
+  scoreA: number;
+  scoreB: number;
+}
+
+export interface UpsetMatch extends FunMatch {
+  winnerWinProb: number;
+}
+
+export interface StreakKing {
+  playerId: number;
+  name: string;
+  streak: number;
+}
+
+export interface WeeklyFun {
+  closest: FunMatch | null;
+  blowout: FunMatch | null;
+  streakKing: StreakKing | null;
+  upset: UpsetMatch | null;
+}
+
 export interface WeeklyStats {
   weekStart: string;
   weekEnd: string;
@@ -39,6 +64,7 @@ export interface WeeklyStats {
   winKing: WeeklyPlayerStat[];
   eloChanges: EloChangeStat[];
   bestPair: BestPair | null;
+  fun: WeeklyFun;
 }
 
 function toEloMatch(m: MatchWithNames): EloMatch {
@@ -187,6 +213,7 @@ export function computeWeeklyStats(
     .sort((a, b) => b.wins - a.wins || b.matches - a.matches);
 
   const eloChanges = computeEloChanges(weekStart, weekEnd, nameMap, allMatches);
+  const fun = computeWeeklyFun(weekMatches, allMatches, weekStart, weekEnd, nameMap);
 
   let bestPair: BestPair | null = null;
   for (const p of pairStats.values()) {
@@ -211,6 +238,95 @@ export function computeWeeklyStats(
     winKing,
     eloChanges,
     bestPair,
+    fun,
+  };
+}
+
+function toFunMatch(m: MatchWithNames): FunMatch {
+  return {
+    date: m.playedAt,
+    teamA: [m.pa1Name, m.pa2Name],
+    teamB: [m.pb1Name, m.pb2Name],
+    scoreA: m.scoreA,
+    scoreB: m.scoreB,
+  };
+}
+
+function computeWeeklyFun(
+  weekMatches: MatchWithNames[],
+  allMatches: MatchWithNames[],
+  weekStart: string,
+  weekEnd: string,
+  nameMap: Map<number, string>
+): WeeklyFun {
+  if (weekMatches.length === 0) {
+    return { closest: null, blowout: null, streakKing: null, upset: null };
+  }
+
+  // closest: smallest diff; tie -> higher winner score; tie -> earliest.
+  // blowout: largest diff; tie -> lower loser score; tie -> earliest.
+  // weekMatches are in listMatchesByDate order, so "keep current" means earliest.
+  let closestM = weekMatches[0];
+  let blowoutM = weekMatches[0];
+  for (const m of weekMatches) {
+    const diff = Math.abs(m.scoreA - m.scoreB);
+    const cDiff = Math.abs(closestM.scoreA - closestM.scoreB);
+    if (
+      diff < cDiff ||
+      (diff === cDiff &&
+        Math.max(m.scoreA, m.scoreB) > Math.max(closestM.scoreA, closestM.scoreB))
+    ) {
+      closestM = m;
+    }
+    const bDiff = Math.abs(blowoutM.scoreA - blowoutM.scoreB);
+    if (
+      diff > bDiff ||
+      (diff === bDiff &&
+        Math.min(m.scoreA, m.scoreB) < Math.min(blowoutM.scoreA, blowoutM.scoreB))
+    ) {
+      blowoutM = m;
+    }
+  }
+
+  // streak king: longest in-week win streak per player, in chronological
+  // order; strict > keeps the first player to reach the max. < 2 -> null.
+  const streaks = new Map<number, number>();
+  let streakKing: StreakKing | null = null;
+  for (const m of weekMatches) {
+    const aWon = m.scoreA > m.scoreB;
+    const winners = aWon ? [m.pa1, m.pa2] : [m.pb1, m.pb2];
+    const losers = aWon ? [m.pb1, m.pb2] : [m.pa1, m.pa2];
+    for (const id of losers) streaks.set(id, 0);
+    for (const id of winners) {
+      const s = (streaks.get(id) ?? 0) + 1;
+      streaks.set(id, s);
+      if (s >= 2 && (streakKing === null || s > streakKing.streak)) {
+        streakKing = { playerId: id, name: nameMap.get(id) ?? "?", streak: s };
+      }
+    }
+  }
+
+  // upset: lowest pre-match winner win prob (ELO) among week matches;
+  // >= 50% is not an upset. Strict < keeps the earliest on ties.
+  const probs = computeMatchWinProbs(allMatches.map(toEloMatch));
+  let upset: UpsetMatch | null = null;
+  let bestProb = 0.5;
+  for (let i = 0; i < allMatches.length; i++) {
+    const m = allMatches[i];
+    if (m.playedAt < weekStart || m.playedAt > weekEnd) continue;
+    const aWon = m.scoreA > m.scoreB;
+    const winnerProb = aWon ? probs[i] : 1 - probs[i];
+    if (winnerProb < bestProb) {
+      bestProb = winnerProb;
+      upset = { ...toFunMatch(m), winnerWinProb: winnerProb };
+    }
+  }
+
+  return {
+    closest: toFunMatch(closestM),
+    blowout: toFunMatch(blowoutM),
+    streakKing,
+    upset,
   };
 }
 
