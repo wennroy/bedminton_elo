@@ -34,7 +34,10 @@ function ratingOf(playerId: string, ratings: Record<string, number>): number {
   return ratings[playerId] ?? INITIAL_RATING;
 }
 
-export function recomputeElos(matches: Match[]): {
+function replayMatches(
+  matches: Match[],
+  visit?: (teamAWin: number) => void
+): {
   ratings: Record<string, number>;
   snapshots: EloSnapshot[];
 } {
@@ -63,6 +66,7 @@ export function recomputeElos(matches: Match[]): {
 
     const teamAAvg = (ratings[match.a1] + ratings[match.a2]) / 2;
     const teamBAvg = (ratings[match.b1] + ratings[match.b2]) / 2;
+    visit?.(1 / (1 + 10 ** ((teamBAvg - teamAAvg) / 400)));
 
     const aWins = match.scoreA > match.scoreB;
     const sA = aWins ? 1 : 0;
@@ -84,4 +88,19 @@ export function recomputeElos(matches: Match[]): {
   recordDayBoundary(lastDate);
 
   return { ratings, snapshots };
+}
+
+export function recomputeElos(matches: Match[]): {
+  ratings: Record<string, number>;
+  snapshots: EloSnapshot[];
+} {
+  return replayMatches(matches);
+}
+
+export function computeMatchWinProbs(matches: Match[]): number[] {
+  const probs: number[] = [];
+  replayMatches(matches, (teamAWin) => {
+    probs.push(teamAWin);
+  });
+  return probs;
 }
