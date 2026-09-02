@@ -4,8 +4,17 @@ import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import type { FunMatch, WeeklyStats } from "@/lib/weekly";
 import {
+  Download,
   Flame,
   Share2,
   Sparkles,
@@ -23,6 +32,57 @@ interface WeeklyViewProps {
 export function WeeklyView({ stats, weekStarts }: WeeklyViewProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [exporting, setExporting] = React.useState(false);
+  const [progress, setProgress] = React.useState(0);
+  const [phase, setPhase] = React.useState<"calc" | "render">("calc");
+  const [exportError, setExportError] = React.useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
+  const timerRef = React.useRef<number | null>(null);
+
+  function stopProgressTimer() {
+    if (timerRef.current !== null) {
+      window.clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }
+
+  React.useEffect(() => stopProgressTimer, []);
+
+  async function handleExport() {
+    if (exporting) return;
+    setExportError(null);
+    setExporting(true);
+    setPhase("calc");
+    setProgress(15);
+    const start = Date.now();
+    timerRef.current = window.setInterval(() => {
+      setProgress((p) => Math.min(p + (90 - p) * 0.06, 90));
+      if (Date.now() - start > 800) setPhase("render");
+    }, 120);
+
+    try {
+      const res = await fetch(`/api/og/weekly?week=${stats.weekStart}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      stopProgressTimer();
+      setProgress(100);
+      setPreviewUrl(URL.createObjectURL(blob));
+    } catch {
+      stopProgressTimer();
+      setExporting(false);
+      setProgress(0);
+      setExportError("生成失败，请稍后重试");
+    }
+  }
+
+  function handlePreviewOpenChange(open: boolean) {
+    if (open) return;
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+    setExporting(false);
+    setProgress(0);
+    setPhase("calc");
+  }
 
   function handleWeekChange(value: string) {
     const params = new URLSearchParams(searchParams.toString());
@@ -185,13 +245,63 @@ export function WeeklyView({ stats, weekStarts }: WeeklyViewProps) {
       <Button
         size="lg"
         className="h-14 w-full text-lg"
-        onClick={() =>
-          window.open(`/api/og/weekly?week=${stats.weekStart}`, "_blank")
-        }
+        onClick={handleExport}
+        disabled={exporting}
       >
-        <Share2 className="mr-2 size-4" />
-        生成分享图
+        {exporting ? (
+          <div className="flex w-full flex-col items-center gap-1.5">
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-primary-foreground/20">
+              <div
+                className="h-full rounded-full bg-primary-foreground transition-[width] duration-200 ease-out"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <span className="text-xs font-normal">
+              {progress >= 100
+                ? "完成"
+                : phase === "calc"
+                  ? "计算数据…"
+                  : "渲染图片…"}
+            </span>
+          </div>
+        ) : (
+          <>
+            <Share2 className="mr-2 size-4" />
+            生成分享图
+          </>
+        )}
       </Button>
+      {exportError && (
+        <p className="text-center text-sm text-rose-600">{exportError}</p>
+      )}
+
+      <Dialog open={previewUrl !== null} onOpenChange={handlePreviewOpenChange}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>第 {stats.weekNumber} 周战报</DialogTitle>
+            <DialogDescription>手机可长按图片保存</DialogDescription>
+          </DialogHeader>
+          {previewUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={previewUrl}
+              alt={`第 ${stats.weekNumber} 周战报分享图`}
+              className="w-full rounded-lg ring-1 ring-border"
+            />
+          )}
+          <DialogFooter>
+            <Button asChild>
+              <a
+                href={previewUrl ?? undefined}
+                download={`周报-${stats.weekStart}.png`}
+              >
+                <Download className="size-4" />
+                下载 PNG
+              </a>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
