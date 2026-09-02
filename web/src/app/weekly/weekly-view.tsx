@@ -4,8 +4,16 @@ import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { Button } from "@/components/ui/button";
-import type { WeeklyStats } from "@/lib/weekly";
-import { Share2, TrendingDown, TrendingUp } from "lucide-react";
+import type { FunMatch, WeeklyStats } from "@/lib/weekly";
+import {
+  Flame,
+  Share2,
+  Sparkles,
+  Swords,
+  TrendingDown,
+  TrendingUp,
+  Zap,
+} from "lucide-react";
 
 interface WeeklyViewProps {
   stats: WeeklyStats;
@@ -21,6 +29,9 @@ export function WeeklyView({ stats, weekStarts }: WeeklyViewProps) {
     params.set("week", value);
     router.push(`/weekly?${params.toString()}`);
   }
+
+  const { fun } = stats;
+  const hasFun = fun.closest || fun.blowout || fun.streakKing || fun.upset;
 
   return (
     <div className="flex flex-col gap-6">
@@ -135,6 +146,42 @@ export function WeeklyView({ stats, weekStarts }: WeeklyViewProps) {
         )}
       </section>
 
+      {hasFun && (
+        <section className="flex flex-col gap-3">
+          <h2 className="text-lg font-bold text-foreground">本周趣闻</h2>
+          <div className="grid grid-cols-2 gap-3">
+            {fun.closest && (
+              <FunCard icon={Swords} title="最胶着一战">
+                <FunMatchLine match={fun.closest} />
+              </FunCard>
+            )}
+            {fun.blowout && (
+              <FunCard icon={Flame} title="本周惨案">
+                <FunMatchLine match={fun.blowout} />
+              </FunCard>
+            )}
+            {fun.streakKing && (
+              <FunCard icon={Zap} title="周连胜王">
+                <div className="font-bold text-card-foreground">
+                  {fun.streakKing.name}
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  {fun.streakKing.streak} 连胜
+                </div>
+              </FunCard>
+            )}
+            {fun.upset && (
+              <FunCard icon={Sparkles} title="本周最大冷门">
+                <FunMatchLine match={fun.upset} />
+                <div className="mt-1 text-xs font-medium text-amber-600">
+                  胜率仅 {Math.round(fun.upset.winnerWinProb * 100)}%
+                </div>
+              </FunCard>
+            )}
+          </div>
+        </section>
+      )}
+
       <Button
         size="lg"
         className="h-14 w-full text-lg"
@@ -177,6 +224,48 @@ function RankRow({
       <span className="text-sm tabular-nums font-semibold text-card-foreground">
         {value}
       </span>
+    </div>
+  );
+}
+
+function FunCard({
+  icon: Icon,
+  title,
+  children,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+      <div className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-muted-foreground">
+        <Icon className="size-4" />
+        {title}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function FunMatchLine({ match }: { match: FunMatch }) {
+  const aWon = match.scoreA > match.scoreB;
+  const winTeam = aWon ? match.teamA : match.teamB;
+  const loseTeam = aWon ? match.teamB : match.teamA;
+  const winScore = aWon ? match.scoreA : match.scoreB;
+  const loseScore = aWon ? match.scoreB : match.scoreA;
+  return (
+    <div className="text-sm leading-snug text-card-foreground">
+      <span className="font-bold">
+        {winTeam[0]} / {winTeam[1]}
+      </span>{" "}
+      <span className="tabular-nums font-semibold">
+        {winScore}:{loseScore}
+      </span>{" "}
+      <span className="text-muted-foreground">
+        {loseTeam[0]} / {loseTeam[1]}
+      </span>
+      <div className="mt-1 text-xs text-muted-foreground">{match.date}</div>
     </div>
   );
 }
