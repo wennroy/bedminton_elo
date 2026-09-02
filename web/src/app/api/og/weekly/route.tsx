@@ -9,8 +9,21 @@ import {
   type UpsetMatch,
 } from "@/lib/weekly";
 
-const truncate = (s: string, max: number) =>
-  s.length > max ? `${s.slice(0, max - 1)}…` : s;
+// Width-aware truncation: CJK/full-width chars count 2, ASCII counts 1,
+// so romanized names get roughly twice the character budget of Chinese names.
+const truncate = (s: string, maxWidth: number) => {
+  const w = (c: string) => (c.codePointAt(0)! > 0xff ? 2 : 1);
+  const chars = Array.from(s);
+  if (chars.reduce((total, c) => total + w(c), 0) <= maxWidth) return s;
+  let out = "";
+  let used = 0;
+  for (const c of chars) {
+    if (used + w(c) > maxWidth - 2) break; // reserve room for the ellipsis
+    out += c;
+    used += w(c);
+  }
+  return `${out}…`;
+};
 
 const FONT_FAMILY =
   '"PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif';
@@ -68,7 +81,7 @@ function PodiumCard({
             return (
               <div
                 key={rank}
-                style={{ display: "flex", width: 80, height: pillarHeights[rank] }}
+                style={{ display: "flex", width: 94, height: pillarHeights[rank] }}
               />
             );
           }
@@ -79,18 +92,19 @@ function PodiumCard({
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
-                width: 80,
+                width: 94,
               }}
             >
               <div
                 style={{
-                  fontSize: 24,
+                  fontSize: 22,
                   fontWeight: 600,
                   color: "#111827",
-                  whiteSpace: "nowrap",
+                  textAlign: "center",
+                  width: "100%",
                 }}
               >
-                {truncate(entry.name, 4)}
+                {truncate(entry.name, 16)}
               </div>
               <div
                 style={{
@@ -188,10 +202,31 @@ function FunCard({
   );
 }
 
-function scoreText(m: FunMatch) {
-  const a = `${truncate(m.teamA[0], 3)}/${truncate(m.teamA[1], 3)}`;
-  const b = `${truncate(m.teamB[0], 3)}/${truncate(m.teamB[1], 3)}`;
-  return `${a}  ${m.scoreA} : ${m.scoreB}  ${b}`;
+// Winner-first two-line layout: "wA / wB  21 : 19" bold on top, losers below.
+// Two lines keep long (romanized) names readable on a 464px-wide card.
+function MatchLines({ m }: { m: FunMatch }) {
+  const aWon = m.scoreA > m.scoreB;
+  const winners = aWon ? m.teamA : m.teamB;
+  const losers = aWon ? m.teamB : m.teamA;
+  const wScore = aWon ? m.scoreA : m.scoreB;
+  const lScore = aWon ? m.scoreB : m.scoreA;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <div
+        style={{
+          fontSize: 28,
+          fontWeight: 700,
+          color: "#111827",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {`${truncate(winners[0], 12)} / ${truncate(winners[1], 12)}  ${wScore} : ${lScore}`}
+      </div>
+      <div style={{ fontSize: 24, color: "#6b7280", whiteSpace: "nowrap" }}>
+        {`${truncate(losers[0], 12)} / ${truncate(losers[1], 12)}`}
+      </div>
+    </div>
+  );
 }
 
 function WeeklyCard({
@@ -228,9 +263,7 @@ function WeeklyCard({
   if (fun.closest) {
     funCards.push(
       <FunCard key="closest" icon="🎯" label="最胶着一战" date={fun.closest.date}>
-        <div style={{ fontSize: 28, fontWeight: 700, color: "#111827" }}>
-          {scoreText(fun.closest)}
-        </div>
+        <MatchLines m={fun.closest} />
         <div style={{ fontSize: 24, color: "#6b7280" }}>
           {`分差仅 ${Math.abs(fun.closest.scoreA - fun.closest.scoreB)} 分`}
         </div>
@@ -240,9 +273,7 @@ function WeeklyCard({
   if (fun.blowout) {
     funCards.push(
       <FunCard key="blowout" icon="💥" label="本周惨案" date={fun.blowout.date}>
-        <div style={{ fontSize: 28, fontWeight: 700, color: "#111827" }}>
-          {scoreText(fun.blowout)}
-        </div>
+        <MatchLines m={fun.blowout} />
         <div style={{ fontSize: 24, color: "#6b7280" }}>
           {`净胜 ${Math.abs(fun.blowout.scoreA - fun.blowout.scoreB)} 分`}
         </div>
@@ -253,21 +284,16 @@ function WeeklyCard({
     funCards.push(
       <FunCard key="streak" icon="🔥" label="周连胜王">
         <div style={{ fontSize: 30, fontWeight: 700, color: "#111827" }}>
-          {`${truncate(fun.streakKing.name, 6)} · ${fun.streakKing.streak} 连胜`}
+          {`${truncate(fun.streakKing.name, 16)} · ${fun.streakKing.streak} 连胜`}
         </div>
       </FunCard>
     );
   }
   if (fun.upset) {
     const u: UpsetMatch = fun.upset;
-    const aWon = u.scoreA > u.scoreB;
-    const winners = aWon ? u.teamA : u.teamB;
-    const losers = aWon ? u.teamB : u.teamA;
     funCards.push(
       <FunCard key="upset" icon="😱" label="本周最大冷门" date={u.date}>
-        <div style={{ fontSize: 28, fontWeight: 700, color: "#111827" }}>
-          {`${truncate(winners[0], 3)}/${truncate(winners[1], 3)} 胜 ${truncate(losers[0], 3)}/${truncate(losers[1], 3)}`}
-        </div>
+        <MatchLines m={u} />
         <div style={{ fontSize: 24, fontWeight: 600, color: "#dc2626" }}>
           {`赛前胜率仅 ${Math.round(u.winnerWinProb * 100)}%`}
         </div>
@@ -385,7 +411,7 @@ function WeeklyCard({
                 whiteSpace: "nowrap",
               }}
             >
-              {`${truncate(stats.bestPair.playerA, 4)} / ${truncate(stats.bestPair.playerB, 4)}`}
+              {`${truncate(stats.bestPair.playerA, 24)} / ${truncate(stats.bestPair.playerB, 24)}`}
             </div>
             <div
               style={{
