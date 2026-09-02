@@ -1,6 +1,6 @@
 # 折线图 tooltip 排序 + 周报导出进度 + TrueSkill 显示优化 + 周期档位
 
-> 状态：进行中
+> 状态：已完成(2026-09-02 发版 v1.2.0,master b9b7400)
 
 ## 目标
 
@@ -53,7 +53,7 @@
   - 要点：leaderboard 的 TrueSkill tab：`tsScore` 改为主显示 `Math.round(mu)`、排序改 `b.mu - a.mu`，副行 `μ-3σ` 文案改为 `±{sigma.toFixed(1)}`；未参赛球员用 TS_MU/TS_SIGMA 兜底（显示 25 ±8.3）。球员页：`summary.tsScore` 处改显示 μ——`stats.ts` 的 `PlayerSummary` 需加 `mu`/`sigma` 字段（`tsPlayers` map 里已有数据；若 `tsScore` 没有其他使用者可顺手删掉，先 grep 确认）。卡片小字：`σ {sigma.toFixed(1)} · 区间 [{Math.round(mu-3*sigma)}, {Math.round(mu+3*sigma)}]`。ELO tab 一行不动。
   - verify: `cd web && pnpm test && pnpm exec tsc --noEmit` + 首页切 TrueSkill tab、任意球员页，目视确认 `[人工]`
 
-- [ ] T5 CHANGELOG 更新 [顺序]
+- [x] T5 CHANGELOG 更新 [顺序]
   - 改动：`CHANGELOG.md`（改）
   - 要点：Unreleased 的 What's New 加条目：折线图 hover 按当前分数排序、周期档调整为近4周/近12周；周报导出加进度条与弹窗预览；TrueSkill 榜显示 μ 与不确定度 σ、新人 25 分起步。措辞面向球友。在 T1–T4 全完成后做。
   - verify: 目视 CHANGELOG 段落 `[人工]`
