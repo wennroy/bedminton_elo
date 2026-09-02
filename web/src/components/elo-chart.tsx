@@ -81,6 +81,11 @@ export function EloChart({ history }: EloChartProps) {
             }}
             labelStyle={{ color: "var(--foreground)", marginBottom: "0.25rem" }}
             itemStyle={{ color: "var(--foreground)" }}
+            itemSorter={(item) => {
+              // 按 ELO 值降序;connectNulls 缺口日 value 可能为 undefined,兜底排到末尾
+              const v = Number(item.value);
+              return Number.isNaN(v) ? Infinity : -v;
+            }}
             formatter={(value, name) => [String(value), String(name)]}
           />
           <Legend
