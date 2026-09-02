@@ -33,22 +33,22 @@
 
 ## Tasks
 
-- [ ] T1 首页趋势图：tooltip 动态排序 + 周期档位 [独立]
+- [x] T1 首页趋势图：tooltip 动态排序 + 周期档位 [独立]
   - 改动：`web/src/components/home-trend.tsx`（改）
   - 要点：Tooltip 加 `itemSorter`，闭包读 mode：排名模式 `(item) => Number(item.value)`（升序），对比模式 `(item) => -Number(item.value)`（降序）。注意 `item.value` 可能为 undefined（connectNulls 缺口日的球员不进 payload，但防御性兜底：`?? Infinity` / 取负前判空，避免 NaN 破坏排序）。`RANGES` 改为 `{ key: "4w", label: "近4周", days: 28 }`、`{ key: "12w", label: "近12周", days: 84 }`、`全部`；`RangeKey` 类型同步；`useState<RangeKey>("4w")` 默认值不变。
   - verify: `cd web && pnpm exec tsc --noEmit` + `pnpm dev` 后首页 hover 两种模式各目视一次（找一个 ELO 顺序中途发生过反转的日期区间确认 tooltip 顺序跟着变）`[人工]`
 
-- [ ] T2 趋势页 EloChart：tooltip 动态排序 [独立]
+- [x] T2 趋势页 EloChart：tooltip 动态排序 [独立]
   - 改动：`web/src/components/elo-chart.tsx`（改）
   - 要点：同 T1 的对比模式：`itemSorter` 按值降序。该组件无排名模式，一处即可。
   - verify: `cd web && pnpm exec tsc --noEmit` + `/trends` 页 hover 目视 `[人工]`
 
-- [ ] T3 周报导出：进度条 + 弹窗预览 [独立]
+- [x] T3 周报导出：进度条 + 弹窗预览 [独立]
   - 改动：`web/src/app/weekly/weekly-view.tsx`（改）
   - 要点：替换 `window.open` 为 async `handleExport`：① setState 进入 exporting，按钮内容换成进度条（div width 过渡：立即 15%，再缓动到 90%）+ 阶段文案（"计算数据…"→"渲染图片…"），按钮 disabled；② `fetch(/api/og/weekly?week=...)` → `res.blob()` → `URL.createObjectURL`；③ 进度 100% 后打开 Dialog（用现有 `components/ui/dialog.tsx`）显示图片 + 下载按钮（`<a href={url} download="周报-2026-08-24.png">`）+ "手机可长按图片保存"提示；④ 弹窗关闭时 `URL.revokeObjectURL`、状态复位；⑤ `!res.ok` / fetch 异常 → 复位并在按钮下方显示错误文案。与 T1/T2/T4 无共同文件。
   - verify: `cd web && pnpm exec tsc --noEmit` + `pnpm dev` 打开 `/weekly?week=2026-08-24` 点导出：进度条动画→弹窗出图→下载/关闭复位，各目视确认 `[人工]`
 
-- [ ] T4 TrueSkill 显示 μ ± σ [独立]
+- [x] T4 TrueSkill 显示 μ ± σ [独立]
   - 改动：`web/src/components/leaderboard.tsx`（改）、`web/src/app/players/[id]/page.tsx`（改）、`web/src/lib/stats.ts`（如需要，改）
   - 要点：leaderboard 的 TrueSkill tab：`tsScore` 改为主显示 `Math.round(mu)`、排序改 `b.mu - a.mu`，副行 `μ-3σ` 文案改为 `±{sigma.toFixed(1)}`；未参赛球员用 TS_MU/TS_SIGMA 兜底（显示 25 ±8.3）。球员页：`summary.tsScore` 处改显示 μ——`stats.ts` 的 `PlayerSummary` 需加 `mu`/`sigma` 字段（`tsPlayers` map 里已有数据；若 `tsScore` 没有其他使用者可顺手删掉，先 grep 确认）。卡片小字：`σ {sigma.toFixed(1)} · 区间 [{Math.round(mu-3*sigma)}, {Math.round(mu+3*sigma)}]`。ELO tab 一行不动。
   - verify: `cd web && pnpm test && pnpm exec tsc --noEmit` + 首页切 TrueSkill tab、任意球员页，目视确认 `[人工]`
