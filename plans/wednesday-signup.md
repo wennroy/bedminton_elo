@@ -61,7 +61,7 @@
   - 要点：SignupCard 为 server 组件（在 page.tsx 直接渲染，传 summary 或内部自取数据均可，注意保持 force-dynamic 页面内直出）；放在 HomeTrend 上方。内容：「🏸 周三局 · M月D日（周三）18:00–20:00」+「已报名 N 人（含小伙伴共 M 人）」+ 右侧「去报名 →」Link 到 /signup；0 人时也正常显示（拉人）。与 T3 无共同文件。
   - verify: `cd web && pnpm exec tsc --noEmit` + `pnpm dev` 首页目视卡片与跳转 `[人工]`
 
-- [ ] T5 CHANGELOG 更新 [顺序]
+- [x] T5 CHANGELOG 更新 [顺序]
   - 改动：`CHANGELOG.md`（改）
   - 要点：Unreleased 的 What's New 加条目（占位注释前）：「周三局报名页上线：选好『我是谁』一键报名，可标记带一位小伙伴；首页新增本期报名卡片」。措辞面向球友。T1–T4 完成后做。
   - verify: 目视 CHANGELOG 段落 `[人工]`
