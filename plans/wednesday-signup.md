@@ -46,7 +46,7 @@
     - 测试覆盖：周三 19:59 → 当天、周三 20:00 → +7 天、周四 → 下周三、upsert 改人数、remove、唯一约束。
   - verify: `cd web && pnpm test -- signup`
 
-- [ ] T2 /api/signups 路由 [顺序]
+- [x] T2 /api/signups 路由 [顺序]
   - 改动：`web/src/app/api/signups/route.ts`（新）
   - 要点：结构对齐 `api/matches/route.ts`（NextResponse、force-dynamic、try/catch 500）。GET → `{ sessionDate, signups: [{playerId, name, partySize, createdAt}], totalPeople }`，sessionDate 恒为 `getActiveSessionDate(new Date())`（不支持查历史）。POST body `{playerId, partySize}`：校验 playerId 存在于 players、partySize ∈ {1,2}，upsert 到当期 session，之后 `revalidatePath("/signup")` 和 `"/"`。DELETE body `{playerId}`：从当期 session 移除，同样 revalidate。不做 admin key 校验（见关键决定）。
   - verify: `cd web && pnpm exec tsc --noEmit && pnpm test` + `pnpm dev` 后 `curl -s localhost:3000/api/signups` 及 POST/DELETE 各一次看返回 `[人工]`
