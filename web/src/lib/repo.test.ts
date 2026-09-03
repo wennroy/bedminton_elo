@@ -127,6 +127,8 @@ describe("repo", () => {
     // Simulate the real legacy db: createDb() already ran schema.sql, but the
     // legacy tables (incl. a `players` table with a DIFFERENT shape) shadow it.
     db.exec(`DROP TABLE IF EXISTS matches`);
+    // signups 引用 players(id)，必须先于 players drop，否则 FK mismatch
+    db.exec(`DROP TABLE IF EXISTS signups`);
     db.exec(`DROP TABLE IF EXISTS players`);
     db.exec(`
       CREATE TABLE users (

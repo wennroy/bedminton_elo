@@ -26,3 +26,13 @@ CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS signups (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_date TEXT NOT NULL,
+  player_id INTEGER NOT NULL,
+  party_size INTEGER NOT NULL DEFAULT 1 CHECK (party_size IN (1, 2)),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (session_date, player_id),
+  FOREIGN KEY (player_id) REFERENCES players(id)
+);
