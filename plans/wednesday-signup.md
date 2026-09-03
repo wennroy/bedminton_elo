@@ -51,12 +51,12 @@
   - 要点：结构对齐 `api/matches/route.ts`（NextResponse、force-dynamic、try/catch 500）。GET → `{ sessionDate, signups: [{playerId, name, partySize, createdAt}], totalPeople }`，sessionDate 恒为 `getActiveSessionDate(new Date())`（不支持查历史）。POST body `{playerId, partySize}`：校验 playerId 存在于 players、partySize ∈ {1,2}，upsert 到当期 session，之后 `revalidatePath("/signup")` 和 `"/"`。DELETE body `{playerId}`：从当期 session 移除，同样 revalidate。不做 admin key 校验（见关键决定）。
   - verify: `cd web && pnpm exec tsc --noEmit && pnpm test` + `pnpm dev` 后 `curl -s localhost:3000/api/signups` 及 POST/DELETE 各一次看返回 `[人工]`
 
-- [ ] T3 /signup 报名页 [独立]
+- [x] T3 /signup 报名页 [独立]
   - 改动：`web/src/app/signup/page.tsx`（新）、`web/src/app/signup/signup-form.tsx`（新）
   - 要点：page.tsx 是 server component，**必须 `export const dynamic = "force-dynamic"`**（routes.test.ts 强制，否则 build 时静态化踩旧坑）；渲染标题「周三局报名」、副标题「每周三 18:00–20:00 · 本期 M月D日（周三）」（由 getActiveSessionDate 格式化）、名单（`名字 ×2` 样式，顶部总计「已报 N 人 · 含小伙伴共 M 人」）、以及 client 组件 SignupForm。SignupForm：用 `getMyPlayerId()` 读身份，未选 → 提示去「我的」页选身份（可复用 identity-picker 模式）；未报名 → 人数切换 1/2 + 「报名」按钮；已报名 → 显示「已报名 ×N」，可切人数（再 POST 即 upsert）+「取消报名」；`getAdminKey()` 非空时每行显示「移除」按钮。所有操作后 `router.refresh()`。视觉对齐现有页面（px-4 pb-28 pt-4、card 风格）。
   - verify: `cd web && pnpm exec tsc --noEmit` + `pnpm dev` 目视走完：报名 → 改人数 → 取消 → admin 移除他人 `[人工]`
 
-- [ ] T4 首页「周三局」卡片 [独立]
+- [x] T4 首页「周三局」卡片 [独立]
   - 改动：`web/src/app/page.tsx`（改）、`web/src/components/signup-card.tsx`（新）
   - 要点：SignupCard 为 server 组件（在 page.tsx 直接渲染，传 summary 或内部自取数据均可，注意保持 force-dynamic 页面内直出）；放在 HomeTrend 上方。内容：「🏸 周三局 · M月D日（周三）18:00–20:00」+「已报名 N 人（含小伙伴共 M 人）」+ 右侧「去报名 →」Link 到 /signup；0 人时也正常显示（拉人）。与 T3 无共同文件。
   - verify: `cd web && pnpm exec tsc --noEmit` + `pnpm dev` 首页目视卡片与跳转 `[人工]`
