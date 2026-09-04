@@ -9,3 +9,7 @@
 - 网站的 `/changelog` 页面在运行时直接解析根目录 `CHANGELOG.md` 的 What's New 小节渲染时间线。**不要**为它另建数据文件或数据库表；保持标题格式（`## [x.y.z] - YYYY-MM-DD`、`## [Unreleased]`、`### What's New`）不变，否则解析会坏。
 - Docker 部署通过 volume 把根目录 `CHANGELOG.md` 挂进容器（`../CHANGELOG.md:/app/CHANGELOG.md:ro`），无需重新 build 镜像即可更新日志内容。
 - 注意：`web/AGENTS.md` 是 `next dev` 自动生成的文件，与本文件无关，不要混用。
+
+## 部署
+
+生产部署步骤见 [docs/deploy.md](docs/deploy.md)：服务器路径、发版流程（`scripts/release.sh` → ssh pull → `docker compose up -d --build`）、CHANGELOG bind-mount 需 restart 的坑、回滚方法。
