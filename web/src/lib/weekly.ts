@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   listPlayers,
   listMatchesByDate,
@@ -129,6 +130,15 @@ export function listWeekStarts(): string[] {
 
 export function buildWeeklyStats(weekStart: string): WeeklyStats {
   return computeWeeklyStats(weekStart, listPlayers(), listMatchesByDate());
+}
+
+// 周报分享图的内容指纹:WeeklyStats 是分享图画面的全部决定因素
+// (比赛/比分/球员名/ELO 都在里面),DB 一变指纹就变。用作 OG 路由的 ETag。
+export function weeklyDataVersion(stats: WeeklyStats): string {
+  return createHash("sha1")
+    .update(JSON.stringify(stats))
+    .digest("hex")
+    .slice(0, 16);
 }
 
 export function computeWeeklyStats(

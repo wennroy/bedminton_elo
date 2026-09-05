@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { getWeekRange, computeWeeklyStats, type MatchWithNames } from "./weekly";
+import {
+  getWeekRange,
+  computeWeeklyStats,
+  weeklyDataVersion,
+  type MatchWithNames,
+} from "./weekly";
 
 const players = [
   { id: 1, name: "Alice" },
@@ -232,6 +237,47 @@ describe("weekly", () => {
       expect(week2.fun.upset!.teamA).toEqual(["Carol", "Dave"]);
       expect(week2.fun.upset!.teamB).toEqual(["Alice", "Bob"]);
       expect(week2.fun.upset!.winnerWinProb).toBeCloseTo(0.455129, 6);
+    });
+  });
+
+  describe("weeklyDataVersion", () => {
+    it("is deterministic for identical stats", () => {
+      const a = computeWeeklyStats("2024-01-01", players, matches);
+      const b = computeWeeklyStats("2024-01-01", players, matches);
+      expect(weeklyDataVersion(a)).toBe(weeklyDataVersion(b));
+    });
+
+    it("changes when a match is added to the week", () => {
+      const before = computeWeeklyStats("2024-01-01", players, matches);
+      const after = computeWeeklyStats("2024-01-01", players, [
+        ...matches,
+        match(7, "2024-01-06", 5, 6, 7, 8, 21, 10),
+      ]);
+      expect(weeklyDataVersion(after)).not.toBe(weeklyDataVersion(before));
+    });
+
+    it("changes when a score changes", () => {
+      const before = computeWeeklyStats("2024-01-01", players, matches);
+      const modified = matches.map((m) =>
+        m.id === 1 ? { ...m, scoreB: 20 } : m
+      );
+      const after = computeWeeklyStats("2024-01-01", players, modified);
+      expect(weeklyDataVersion(after)).not.toBe(weeklyDataVersion(before));
+    });
+
+    it("changes when a player is renamed", () => {
+      const before = computeWeeklyStats("2024-01-01", players, matches);
+      const renamed = players.map((p) =>
+        p.id === 1 ? { ...p, name: "Alicia" } : p
+      );
+      const after = computeWeeklyStats("2024-01-01", renamed, matches);
+      expect(weeklyDataVersion(after)).not.toBe(weeklyDataVersion(before));
+    });
+
+    it("differs across weeks", () => {
+      const week1 = computeWeeklyStats("2024-01-01", players, matches);
+      const week2 = computeWeeklyStats("2024-01-08", players, matches);
+      expect(weeklyDataVersion(week1)).not.toBe(weeklyDataVersion(week2));
     });
   });
 });
