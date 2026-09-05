@@ -63,19 +63,24 @@ describe.sequential("og/weekly API", () => {
     }
   });
 
-  it("renders PNG with no-cache + etag when tag is stale or absent", async () => {
-    seedFourPlayers();
-    for (const ifNoneMatch of [undefined, '"stale-tag"']) {
-      const res = await GET(createRequest(WEEK, ifNoneMatch));
-      expect(res.status).toBe(200);
-      expect(res.headers.get("content-type")).toBe("image/png");
-      expect(res.headers.get("cache-control")).toBe("no-cache");
-      expect(res.headers.get("cache-control")).not.toContain("immutable");
-      expect(res.headers.get("etag")).toBe(currentEtag());
-      const png = await res.arrayBuffer();
-      expect(png.byteLength).toBeGreaterThan(0);
-    }
-  });
+  it(
+    "renders PNG with no-cache + etag when tag is stale or absent",
+    async () => {
+      seedFourPlayers();
+      for (const ifNoneMatch of [undefined, '"stale-tag"']) {
+        const res = await GET(createRequest(WEEK, ifNoneMatch));
+        expect(res.status).toBe(200);
+        expect(res.headers.get("content-type")).toBe("image/png");
+        expect(res.headers.get("cache-control")).toBe("no-cache");
+        expect(res.headers.get("cache-control")).not.toContain("immutable");
+        expect(res.headers.get("etag")).toBe(currentEtag());
+        const png = await res.arrayBuffer();
+        expect(png.byteLength).toBeGreaterThan(0);
+      }
+    },
+    // Satori + resvg wasm 冷渲染单次需 2-5s,循环两次,默认 5s 超时不够
+    30000
+  );
 
   it("short-circuits with 304 when If-None-Match matches current version", async () => {
     seedFourPlayers();
@@ -86,30 +91,34 @@ describe.sequential("og/weekly API", () => {
     expect(await res.text()).toBe("");
   });
 
-  it("etag changes after new match data", async () => {
-    const [p1, p2, p3, p4] = seedFourPlayers();
-    const before = currentEtag();
-    const res1 = await GET(createRequest(WEEK, before));
-    expect(res1.status).toBe(304);
+  it(
+    "etag changes after new match data",
+    async () => {
+      const [p1, p2, p3, p4] = seedFourPlayers();
+      const before = currentEtag();
+      const res1 = await GET(createRequest(WEEK, before));
+      expect(res1.status).toBe(304);
 
-    addMatch({
-      pa1: p1,
-      pa2: p3,
-      pb1: p2,
-      pb2: p4,
-      scoreA: 18,
-      scoreB: 21,
-      playedAt: PLAYED_AT,
-    });
+      addMatch({
+        pa1: p1,
+        pa2: p3,
+        pb1: p2,
+        pb2: p4,
+        scoreA: 18,
+        scoreB: 21,
+        playedAt: PLAYED_AT,
+      });
 
-    const after = currentEtag();
-    expect(after).not.toBe(before);
-    // 旧 etag 失效 → 重新渲染
-    const res2 = await GET(createRequest(WEEK, before));
-    expect(res2.status).toBe(200);
-    expect(res2.headers.get("etag")).toBe(after);
-    // 新 etag → 又可以 304
-    const res3 = await GET(createRequest(WEEK, after));
-    expect(res3.status).toBe(304);
-  });
+      const after = currentEtag();
+      expect(after).not.toBe(before);
+      // 旧 etag 失效 → 重新渲染
+      const res2 = await GET(createRequest(WEEK, before));
+      expect(res2.status).toBe(200);
+      expect(res2.headers.get("etag")).toBe(after);
+      // 新 etag → 又可以 304
+      const res3 = await GET(createRequest(WEEK, after));
+      expect(res3.status).toBe(304);
+    },
+    30000
+  );
 });
