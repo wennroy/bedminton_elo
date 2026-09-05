@@ -61,7 +61,10 @@ export function WeeklyView({ stats, weekStarts }: WeeklyViewProps) {
     }, 120);
 
     try {
-      const res = await fetch(`/api/og/weekly?week=${stats.weekStart}`);
+      // v=2:一次性破缓存。旧版本接口响应带 immutable 一年缓存,浏览器按
+      // 完整 URL 作 key 存了旧图且永不回源;换个 URL key 规避存量条目。
+      // 此后新鲜度由服务端 ETag 协商保证(no-cache + 304)。
+      const res = await fetch(`/api/og/weekly?week=${stats.weekStart}&v=2`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
       stopProgressTimer();
