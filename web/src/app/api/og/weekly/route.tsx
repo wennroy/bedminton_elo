@@ -5,8 +5,10 @@ import type { ReactNode } from "react";
 import {
   buildWeeklyStats,
   getWeekRange,
+  weeklyDataVersion,
   type FunMatch,
   type UpsetMatch,
+  type WeeklyStats,
 } from "@/lib/weekly";
 
 // Width-aware truncation: CJK/full-width chars count 2, ASCII counts 1,
@@ -230,13 +232,12 @@ function MatchLines({ m }: { m: FunMatch }) {
 }
 
 function WeeklyCard({
-  weekStart,
+  stats,
   qrDataUrl,
 }: {
-  weekStart: string;
+  stats: WeeklyStats;
   qrDataUrl: string;
 }) {
-  const stats = buildWeeklyStats(weekStart);
   const hasData = stats.attendance.length > 0;
 
   const attendanceEntries: PodiumEntry[] = stats.attendance
@@ -519,13 +520,22 @@ export async function GET(request: Request) {
 
   try {
     const { weekStart } = getWeekRange(week);
+    const stats = buildWeeklyStats(weekStart);
+    // 协商缓存:指纹不变 → 304 短路,跳过 QR 生成与 Satori 渲染。
+    // no-cache = 允许存储但每次用前必须回源校验,取代 ImageResponse
+    // 默认的 immutable 一年缓存(那正是数据更新后仍出旧图的根因)。
+    const etag = `"${weeklyDataVersion(stats)}"`;
+    const cacheHeaders = { "Cache-Control": "no-cache", ETag: etag };
+    if (request.headers.get("if-none-match") === etag) {
+      return new Response(null, { status: 304, headers: cacheHeaders });
+    }
     const qrDataUrl = await QRCode.toDataURL(
       "https://bedminton.wennroy.com/",
       { width: 300, margin: 0, color: { dark: "#111827", light: "#ffffff" } }
     );
     return new ImageResponse(
-      <WeeklyCard weekStart={weekStart} qrDataUrl={qrDataUrl} />,
-      { width: 1080, height: 1920 }
+      <WeeklyCard stats={stats} qrDataUrl={qrDataUrl} />,
+      { width: 1080, height: 1920, headers: cacheHeaders }
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
