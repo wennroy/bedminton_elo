@@ -251,24 +251,31 @@ function ScheduleResultView({ result }: { result: ScheduleResult }) {
       </div>
       <div className="space-y-3">
         {result.schedule.map((match, index) => (
-          <Link
+          <div
             key={index}
-            href={`/record?pa1=${match.a1}&pa2=${match.a2}&pb1=${match.b1}&pb2=${match.b2}`}
-            className="block rounded-2xl border border-border bg-card p-3 shadow-sm transition-colors hover:border-primary/50 hover:bg-muted/30"
+            className="rounded-2xl border border-border bg-card p-3 shadow-sm transition-colors hover:border-primary/50"
           >
             <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
               <span>第 {index + 1} 场</span>
-              <span className="flex items-center gap-1">
+              <Link
+                href={`/predict?pa1=${match.a1}&pa2=${match.a2}&pb1=${match.b1}&pb2=${match.b2}`}
+                className="flex items-center gap-1 rounded-md px-1 py-0.5 transition-colors hover:text-primary"
+              >
                 A 队胜率 {Math.round(match.winRate * 100)}%
                 <ChevronRight className="size-3" />
-              </span>
+              </Link>
             </div>
-            <div className="flex items-center justify-between gap-2">
-              <TeamView ids={[match.a1, match.a2]} names={result.names} />
-              <span className="text-sm font-bold text-muted-foreground">VS</span>
-              <TeamView ids={[match.b1, match.b2]} names={result.names} />
-            </div>
-          </Link>
+            <Link
+              href={`/record?pa1=${match.a1}&pa2=${match.a2}&pb1=${match.b1}&pb2=${match.b2}`}
+              className="-mx-1 block rounded-xl px-1 transition-colors hover:bg-muted/30"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <TeamView ids={[match.a1, match.a2]} names={result.names} />
+                <span className="text-sm font-bold text-muted-foreground">VS</span>
+                <TeamView ids={[match.b1, match.b2]} names={result.names} />
+              </div>
+            </Link>
+          </div>
         ))}
       </div>
 
