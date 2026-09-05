@@ -85,7 +85,7 @@
     `esbuild: { jsx: "automatic" }`（tsconfig 的 jsx:preserve 只对 Next 生效，
     esbuild 默认 classic 会报 React is not defined）——已随 T2 一并修复。
 
-- [ ] T3 客户端一次性破缓存参数 [独立]
+- [x] T3 客户端一次性破缓存参数 [独立]
   - 改动：`web/src/app/weekly/weekly-view.tsx`（改）
   - 要点：handleExport 里 fetch URL 改为
     `/api/og/weekly?week=${stats.weekStart}&v=2`，上方加注释：旧版本响应带
@@ -93,7 +93,7 @@
     此后新鲜度由服务端 ETag 协商保证。其余不动。
   - verify: `pnpm -C web lint src/app/weekly/weekly-view.tsx && pnpm -C web test`
 
-- [ ] T4 全局验收 + 生产模式冒烟 [顺序]（依赖 T1-T3）
+- [x] T4 全局验收 + 生产模式冒烟 [顺序]（依赖 T1-T3）
   - 改动：无（仅验证）
   - 要点：跑全局验收；然后临时库冒烟（参考 v1.4.0 做法：tmpdir 建库 +
     schema.sql + 4 人 1 场，`DATABASE_URL=/tmp/xxx.db npx next start -p 3210`
