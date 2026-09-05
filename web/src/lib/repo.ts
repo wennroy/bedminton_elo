@@ -39,12 +39,12 @@ export interface PlayerRatings {
   sigma: number;
 }
 
-function useDb(db?: Database.Database): Database.Database {
+function resolveDb(db?: Database.Database): Database.Database {
   return db ?? getDb();
 }
 
 export function listPlayers(db?: Database.Database): Player[] {
-  const conn = useDb(db);
+  const conn = resolveDb(db);
   const rows = conn
     .prepare(
       `SELECT id, name, created_at AS createdAt FROM players ORDER BY name`
@@ -54,18 +54,18 @@ export function listPlayers(db?: Database.Database): Player[] {
 }
 
 export function addPlayer(name: string, db?: Database.Database): number {
-  const conn = useDb(db);
+  const conn = resolveDb(db);
   const result = conn.prepare(`INSERT INTO players (name) VALUES (?)`).run(name);
   return Number(result.lastInsertRowid);
 }
 
 export function renamePlayer(id: number, name: string, db?: Database.Database): void {
-  const conn = useDb(db);
+  const conn = resolveDb(db);
   conn.prepare(`UPDATE players SET name = ? WHERE id = ?`).run(name, id);
 }
 
 export function mergePlayers(fromId: number, toId: number, db?: Database.Database): void {
-  const conn = useDb(db);
+  const conn = resolveDb(db);
   const tx = conn.transaction(() => {
     for (const col of ["pa1", "pa2", "pb1", "pb2", "entered_by"] as const) {
       conn.prepare(`UPDATE matches SET ${col} = ? WHERE ${col} = ?`).run(
@@ -97,7 +97,7 @@ export function addMatch(input: AddMatchInput, db?: Database.Database): number {
   if (input.scoreA === input.scoreB) {
     throw new Error("Scores must not be equal");
   }
-  const conn = useDb(db);
+  const conn = resolveDb(db);
   const result = conn
     .prepare(
       `INSERT INTO matches (pa1, pa2, pb1, pb2, score_a, score_b, played_at, entered_by)
@@ -117,7 +117,7 @@ export function addMatch(input: AddMatchInput, db?: Database.Database): number {
 }
 
 export function getMatch(id: number, db?: Database.Database): MatchWithNames | undefined {
-  const conn = useDb(db);
+  const conn = resolveDb(db);
   const row = conn
     .prepare(
       `SELECT
@@ -147,7 +147,7 @@ export function getMatch(id: number, db?: Database.Database): MatchWithNames | u
 }
 
 export function listMatchesByDate(db?: Database.Database): MatchWithNames[] {
-  const conn = useDb(db);
+  const conn = resolveDb(db);
   const rows = conn
     .prepare(
       `SELECT
@@ -177,7 +177,7 @@ export function listMatchesByDate(db?: Database.Database): MatchWithNames[] {
 }
 
 export function deleteMatch(id: number, db?: Database.Database): void {
-  const conn = useDb(db);
+  const conn = resolveDb(db);
   conn.prepare(`DELETE FROM matches WHERE id = ?`).run(id);
 }
 

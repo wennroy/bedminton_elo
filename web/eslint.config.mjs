@@ -1,18 +1,19 @@
-import { defineConfig, globalIgnores } from "eslint/config";
-import nextVitals from "eslint-config-next/core-web-vitals.js";
-import nextTs from "eslint-config-next/typescript.js";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { FlatCompat } from "@eslint/eslintrc";
 
-const eslintConfig = defineConfig([
-  ...nextVitals,
-  ...nextTs,
-  // Override default ignores of eslint-config-next.
-  globalIgnores([
-    // Default ignores of eslint-config-next:
-    ".next/**",
-    "out/**",
-    "build/**",
-    "next-env.d.ts",
-  ]),
-]);
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// eslint-config-next@15 的 core-web-vitals/typescript 入口仍是 legacy
+// eslintrc 格式,需经 FlatCompat 包装;直接 spread 会在加载期抛
+// "nextVitals is not iterable"。(Next 16 起才是原生 flat config)
+const compat = new FlatCompat({ baseDirectory: __dirname });
+
+const eslintConfig = [
+  ...compat.extends("next/core-web-vitals", "next/typescript"),
+  {
+    ignores: [".next/**", ".next-dev/**", "out/**", "build/**", "next-env.d.ts"],
+  },
+];
 
 export default eslintConfig;
