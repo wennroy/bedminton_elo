@@ -7,6 +7,7 @@ import { HomeTrend, type PlayerSummaryLite } from "@/components/home-trend";
 import { WeekMatches } from "@/components/week-matches";
 import { CollapsibleSection } from "@/components/collapsible-section";
 import { SignupCard } from "@/components/signup-card";
+import { PredictCard } from "@/components/predict-card";
 
 export const dynamic = "force-dynamic";
 
@@ -58,6 +59,7 @@ export default async function HomePage() {
     <main className="min-h-full bg-background px-4 pb-28 pt-4">
       <div className="flex flex-col gap-4">
         <SignupCard />
+        <PredictCard />
         <HomeTrend history={eloHistory} summaries={summaries} />
         <CollapsibleSection title="排行榜" badge={`${players.length} 人`}>
           <Leaderboard players={players} matches={matches} />
