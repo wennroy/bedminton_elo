@@ -2,21 +2,30 @@
 
 import * as React from "react";
 import { PlayerAvatar } from "@/components/player-avatar";
-import { Button } from "@/components/ui/button";
 import { predictElo } from "@/lib/elo";
-import { predictTeamOutcomeWin, createPlayer } from "@/lib/trueskill";
 import { RotateCcw } from "lucide-react";
+
+type Slot = number | null;
 
 interface PredictFormProps {
   players: { id: number; name: string }[];
   ratings: Map<number, { elo: number; mu: number; sigma: number }>;
+  initialTeamA?: [Slot, Slot];
+  initialTeamB?: [Slot, Slot];
 }
 
-type Slot = number | null;
-
-export function PredictForm({ players, ratings }: PredictFormProps) {
-  const [teamA, setTeamA] = React.useState<[Slot, Slot]>([null, null]);
-  const [teamB, setTeamB] = React.useState<[Slot, Slot]>([null, null]);
+export function PredictForm({
+  players,
+  ratings,
+  initialTeamA,
+  initialTeamB,
+}: PredictFormProps) {
+  const [teamA, setTeamA] = React.useState<[Slot, Slot]>(
+    initialTeamA ?? [null, null]
+  );
+  const [teamB, setTeamB] = React.useState<[Slot, Slot]>(
+    initialTeamB ?? [null, null]
+  );
 
   const playerMap = React.useMemo(
     () => new Map(players.map((p) => [p.id, p])),
@@ -45,19 +54,6 @@ export function PredictForm({ players, ratings }: PredictFormProps) {
       eloRatings
     );
   }, [ready, teamAIds, teamBIds, players, ratings]);
-
-  const tsPrediction = React.useMemo(() => {
-    if (!ready) return null;
-    const teamAPlayers = teamAIds.map((id) => {
-      const r = ratings.get(id);
-      return createPlayer(r?.mu ?? 25, r?.sigma ?? 8.333);
-    });
-    const teamBPlayers = teamBIds.map((id) => {
-      const r = ratings.get(id);
-      return createPlayer(r?.mu ?? 25, r?.sigma ?? 8.333);
-    });
-    return predictTeamOutcomeWin(teamAPlayers, teamBPlayers);
-  }, [ready, teamAIds, teamBIds, ratings]);
 
   function toggleTeamA(id: number) {
     setTeamA((current) => {
@@ -178,15 +174,12 @@ export function PredictForm({ players, ratings }: PredictFormProps) {
         </div>
       </div>
 
-      {ready && eloPrediction && tsPrediction && (
+      {ready && eloPrediction && (
         <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
           <h2 className="mb-4 font-semibold text-card-foreground">预测结果（A 队胜率）</h2>
-          <div className="space-y-4">
-            <PredictionBar label="ELO" value={eloPrediction.teamAWin} color="bg-blue-500" />
-            <PredictionBar label="TrueSkill" value={tsPrediction} color="bg-orange-500" />
-          </div>
+          <PredictionBar label="ELO" value={eloPrediction.teamAWin} color="bg-blue-500" />
           <p className="mt-4 text-xs text-muted-foreground">
-            基于当前双评分系统计算，仅供参考。
+            基于当前 ELO 分计算，仅供参考。
           </p>
         </div>
       )}
