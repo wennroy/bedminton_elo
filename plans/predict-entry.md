@@ -1,6 +1,6 @@
 # 胜率预测入口与口径统一
 
-> 状态：进行中
+> 状态：已完成
 
 ## 目标
 
@@ -76,14 +76,14 @@
     predictElo 计算值一致。
   - verify: `pnpm -C web test -- schedule`
 
-- [ ] T5 全站终验与走查 [顺序]
+- [x] T5 全站终验与走查 [顺序]
   - 改动：无（仅验证）
   - 要点：跑全局验收命令；手动走查清单：首页卡片→/predict；配对页生成→
     点胜率行→/predict 预填；预填后换队/清空正常；配对页胜率数字与 /predict
     同阵容数字一致（都是 ELO 口径）。
   - verify: `pnpm -C web lint && pnpm -C web test && pnpm -C web build` ＋[人工] 走查清单全过
 
-- [ ] T6 更新 CHANGELOG.md [顺序]
+- [x] T6 更新 CHANGELOG.md [顺序]
   - 改动：`CHANGELOG.md`（仓库根目录，改）
   - 要点：按既有格式补 Unreleased 条目：预测页入口（首页卡片 + 配对页联动）、
     全站胜率统一 ELO 口径。不 bump 版本号（release 脚本负责）。
