@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { listPlayers, recomputeAllRatings } from "@/lib/repo";
 import { optimizeSchedule, type ScheduledMatch } from "@/lib/scheduler";
-import { predictTeamOutcomeWin, createPlayer } from "@/lib/trueskill";
+import { createPlayer } from "@/lib/trueskill";
+import { predictElo } from "@/lib/elo";
 
 interface PostBody {
   playerIds: number[];
@@ -69,6 +70,9 @@ export async function POST(request: Request) {
   }
 
   const ratings = recomputeAllRatings();
+  const eloRatings: Record<string, number> = Object.fromEntries(
+    [...ratings].map(([id, r]) => [String(id), r.elo])
+  );
   const stringIds = input.playerIds.map(String);
   const tsPlayers = input.playerIds.map((id) => {
     const r = ratings.get(id);
@@ -84,11 +88,13 @@ export async function POST(request: Request) {
   });
 
   const schedule: ScheduleMatchOutput[] = result.schedule.map((match) => {
-    const teamA = [match.a1, match.a2].map((id) => tsPlayers[stringIds.indexOf(id)]
-    );
-    const teamB = [match.b1, match.b2].map((id) => tsPlayers[stringIds.indexOf(id)]
-    );
-    const winRate = predictTeamOutcomeWin(teamA, teamB);
+    const winRate = predictElo(
+      match.a1,
+      match.a2,
+      match.b1,
+      match.b2,
+      eloRatings
+    ).teamAWin;
     return { ...match, winRate };
   });
 
