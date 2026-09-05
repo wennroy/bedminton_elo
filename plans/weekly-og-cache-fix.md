@@ -1,6 +1,6 @@
 # 周报分享图缓存失效修复
 
-> 状态：进行中
+> 状态：已完成
 
 ## 目标
 
@@ -106,14 +106,14 @@
     冒烟完删除临时库。
   - verify: `pnpm -C web lint && pnpm -C web test && pnpm -C web build` ＋[人工] 上述 4 条 curl 全过
 
-- [ ] T5 更新 CHANGELOG.md [顺序]
+- [x] T5 更新 CHANGELOG.md [顺序]
   - 改动：`CHANGELOG.md`（仓库根目录，改）
   - 要点：Unreleased 的 What's New 下加面向球友的一条，如
     「修复：周报分享图在录入新比赛后重新生成仍是旧图，现在会按最新数据出图」。
     不 bump 版本号（release 脚本负责）。
   - verify: `pnpm -C web test`（changelog.test.ts 校验格式）
 
-- [ ] T6 发布 v1.4.1 并部署上线 [顺序]（依赖 T1-T5）＋[人工]
+- [x] T6 发布 v1.4.1 并部署上线 [顺序]（依赖 T1-T5）＋[人工]
   - 改动：`CHANGELOG.md`、`web/package.json`（均由 scripts/release.sh 改）
   - 要点：主会话执行，不派 subagent。
     1. `scripts/release.sh 1.4.1` → 提交（风格参照 git log，如
