@@ -13,12 +13,12 @@ export default async function WeeklyPage({ searchParams }: WeeklyPageProps) {
   const weekStarts = listWeekStarts();
   if (weekStarts.length === 0) {
     return (
-      <main className="min-h-full bg-background px-4 pb-28 pt-4">
+      <div>
         <h1 className="mb-4 text-xl font-bold text-foreground">周报</h1>
         <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
           还没有比赛数据
         </div>
-      </main>
+      </div>
     );
   }
 
@@ -35,8 +35,8 @@ export default async function WeeklyPage({ searchParams }: WeeklyPageProps) {
   const stats = buildWeeklyStats(weekStart);
 
   return (
-    <main className="min-h-full bg-background px-4 pb-28 pt-4">
+    <div>
       <WeeklyView stats={stats} weekStarts={weekStarts} />
-    </main>
+    </div>
   );
 }

@@ -87,13 +87,13 @@ export function PredictForm({
       <div className="grid grid-cols-2 gap-3">
         <TeamPanel
           label="A 队"
-          accent="bg-blue-50 text-blue-700 ring-blue-200"
+          accent="bg-team-a/15 text-foreground ring-team-a/50"
           slots={teamA}
           playerMap={playerMap}
         />
         <TeamPanel
           label="B 队"
-          accent="bg-orange-50 text-orange-700 ring-orange-200"
+          accent="bg-team-b/15 text-foreground ring-team-b/50"
           slots={teamB}
           playerMap={playerMap}
         />
@@ -127,7 +127,7 @@ export function PredictForm({
                     disabled={disabled}
                     className={`flex flex-col items-center gap-1 rounded-xl border p-2 transition-all ${
                       active
-                        ? "border-blue-500 bg-blue-50"
+                        ? "border-team-a bg-team-a/15"
                         : disabled
                         ? "border-border bg-muted opacity-40"
                         : "border-border bg-background hover:bg-muted"
@@ -156,7 +156,7 @@ export function PredictForm({
                     disabled={disabled}
                     className={`flex flex-col items-center gap-1 rounded-xl border p-2 transition-all ${
                       active
-                        ? "border-orange-500 bg-orange-50"
+                        ? "border-team-b bg-team-b/15"
                         : disabled
                         ? "border-border bg-muted opacity-40"
                         : "border-border bg-background hover:bg-muted"
@@ -177,7 +177,7 @@ export function PredictForm({
       {ready && eloPrediction && (
         <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
           <h2 className="mb-4 font-semibold text-card-foreground">预测结果（A 队胜率）</h2>
-          <PredictionBar label="ELO" value={eloPrediction.teamAWin} color="bg-blue-500" />
+          <PredictionBar label="ELO" value={eloPrediction.teamAWin} color="bg-team-a" />
           <p className="mt-4 text-xs text-muted-foreground">
             基于当前 ELO 分计算，仅供参考。
           </p>
@@ -185,7 +185,7 @@ export function PredictForm({
       )}
 
       {!ready && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-center text-sm text-amber-800">
+        <div className="rounded-xl border border-border bg-secondary p-4 text-center text-sm text-secondary-foreground">
           请为两队各选 2 人
         </div>
       )}
@@ -215,7 +215,7 @@ function TeamPanel({
           return (
             <div
               key={i}
-              className="flex h-16 w-16 flex-col items-center justify-center rounded-xl bg-white/70 shadow-sm"
+              className="flex h-16 w-16 flex-col items-center justify-center rounded-xl bg-card/70 shadow-sm"
             >
               {player ? (
                 <>

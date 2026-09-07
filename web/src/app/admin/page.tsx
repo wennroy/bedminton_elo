@@ -56,7 +56,7 @@ export default function AdminPage() {
 
   if (adminKey === null) {
     return (
-      <main className="min-h-full bg-background px-4 pb-28 pt-4">
+      <div>
         <div className="mb-6 flex items-center gap-2">
           <Button variant="ghost" size="icon-sm" asChild>
             <Link href="/" aria-label="返回">
@@ -92,12 +92,12 @@ export default function AdminPage() {
             解锁
           </Button>
         </form>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="min-h-full bg-background px-4 pb-28 pt-4">
+    <div>
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon-sm" asChild>
@@ -114,7 +114,7 @@ export default function AdminPage() {
       </div>
 
       <AdminDashboard adminKey={adminKey} />
-    </main>
+    </div>
   );
 }
 

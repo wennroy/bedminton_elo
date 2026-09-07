@@ -170,7 +170,7 @@ export function WeeklyView({ stats, weekStarts }: WeeklyViewProps) {
                 rank={i + 1}
                 name={s.name}
                 value={
-                  <span className={s.change >= 0 ? "text-emerald-600" : "text-rose-600"}>
+                  <span className={s.change >= 0 ? "text-win" : "text-loss"}>
                     {s.change >= 0 ? "+" : ""}
                     {s.change}
                     {s.change >= 0 ? (
@@ -236,7 +236,7 @@ export function WeeklyView({ stats, weekStarts }: WeeklyViewProps) {
             {fun.upset && (
               <FunCard icon={Sparkles} title="本周最大冷门">
                 <FunMatchLine match={fun.upset} />
-                <div className="mt-1 text-xs font-medium text-amber-600">
+                <div className="mt-1 text-xs font-medium text-win">
                   胜率仅 {Math.round(fun.upset.winnerWinProb * 100)}%
                 </div>
               </FunCard>
@@ -275,7 +275,7 @@ export function WeeklyView({ stats, weekStarts }: WeeklyViewProps) {
         )}
       </Button>
       {exportError && (
-        <p className="text-center text-sm text-rose-600">{exportError}</p>
+        <p className="text-center text-sm text-destructive">{exportError}</p>
       )}
 
       <Dialog open={previewUrl !== null} onOpenChange={handlePreviewOpenChange}>
@@ -319,9 +319,9 @@ function RankRow({
   value: React.ReactNode;
 }) {
   const medalColors = [
-    "bg-amber-100 text-amber-700 ring-amber-200",
-    "bg-slate-100 text-slate-700 ring-slate-200",
-    "bg-orange-100 text-orange-800 ring-orange-200",
+    "bg-amber-100 text-amber-700 ring-amber-200 dark:bg-amber-400/15 dark:text-amber-300 dark:ring-amber-400/30",
+    "bg-slate-100 text-slate-700 ring-slate-200 dark:bg-slate-400/15 dark:text-slate-300 dark:ring-slate-400/30",
+    "bg-orange-100 text-orange-800 ring-orange-200 dark:bg-orange-400/15 dark:text-orange-300 dark:ring-orange-400/30",
   ];
   return (
     <div className="flex items-center gap-3 rounded-2xl border border-border bg-card p-3 shadow-sm">

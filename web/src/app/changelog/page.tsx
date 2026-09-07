@@ -9,7 +9,7 @@ export default function ChangelogPage() {
   const entries = readChangelog();
 
   return (
-    <main className="min-h-full bg-background px-4 pb-28 pt-4">
+    <div>
       <div className="mb-4 flex items-center gap-2">
         <Button variant="ghost" size="icon-sm" asChild>
           <Link href="/me" aria-label="返回">
@@ -34,7 +34,7 @@ export default function ChangelogPage() {
           ))}
         </div>
       )}
-    </main>
+    </div>
   );
 }
 
@@ -51,7 +51,7 @@ function TimelineItem({
       <div className="flex flex-col items-center">
         <span
           className={`mt-1.5 h-3 w-3 shrink-0 rounded-full ring-4 ring-background ${
-            unreleased ? "bg-amber-500" : "bg-primary"
+            unreleased ? "bg-primary" : "bg-border"
           }`}
         />
         {!isLast && <span className="w-0.5 flex-1 bg-border" />}
@@ -60,7 +60,7 @@ function TimelineItem({
         <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
           <div className="mb-2 flex items-center justify-between gap-2">
             {unreleased ? (
-              <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
+              <span className="rounded-full bg-primary px-2.5 py-0.5 text-xs font-semibold text-primary-foreground">
                 未发布
               </span>
             ) : (

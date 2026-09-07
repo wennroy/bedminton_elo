@@ -47,7 +47,7 @@ export default function MePage() {
   }
 
   return (
-    <main className="min-h-full bg-background px-4 pb-28 pt-4">
+    <div>
       <h1 className="mb-6 text-xl font-bold text-foreground">我的</h1>
 
       <section className="mb-6 flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm">
@@ -122,6 +122,6 @@ export default function MePage() {
           <ChevronRight className="size-5 text-muted-foreground" />
         </Link>
       </section>
-    </main>
+    </div>
   );
 }

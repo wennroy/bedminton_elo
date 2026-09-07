@@ -29,7 +29,7 @@ export default async function PredictPage({ searchParams }: PredictPageProps) {
   const initialTeamB: [Slot, Slot] = [parse("pb1"), parse("pb2")];
 
   return (
-    <main className="min-h-full bg-background px-4 pb-28 pt-4">
+    <div>
       <h1 className="mb-4 text-xl font-bold text-foreground">2v2 胜率预测</h1>
       <PredictForm
         players={players}
@@ -37,6 +37,6 @@ export default async function PredictPage({ searchParams }: PredictPageProps) {
         initialTeamA={initialTeamA}
         initialTeamB={initialTeamB}
       />
-    </main>
+    </div>
   );
 }
