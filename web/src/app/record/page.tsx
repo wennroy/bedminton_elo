@@ -1,4 +1,4 @@
-import { listPlayers } from "@/lib/repo";
+import { listPlayers, listMatchesByDate } from "@/lib/repo";
 import { RecordForm } from "@/components/record-form";
 
 // Players live in the runtime sqlite db — prerendering at build time would
@@ -13,6 +13,7 @@ interface RecordPageProps {
 
 export default async function RecordPage({ searchParams }: RecordPageProps) {
   const players = listPlayers();
+  const matches = listMatchesByDate();
   const sp = await searchParams;
 
   // 配对页带过来的预填阵容(如 /record?pa1=1&pa2=2&pb1=3&pb2=4);
@@ -28,9 +29,23 @@ export default async function RecordPage({ searchParams }: RecordPageProps) {
     : undefined;
 
   return (
-    <main className="min-h-full bg-background px-4 pb-28 pt-4">
-      <h1 className="mb-6 text-xl font-bold text-foreground">快速记分</h1>
-      <RecordForm players={players} initialSlots={initialSlots} />
-    </main>
+    <div className="flex flex-col gap-5 max-[760px]:gap-3.5">
+      <div>
+        <div className="text-[10px] font-bold tracking-[2px] text-muted-foreground max-[760px]:text-[9px]">
+          MATCH RECORD
+        </div>
+        <h1 className="mt-2 text-[30px] font-bold tracking-[-0.8px] text-foreground max-[760px]:text-[26px]">
+          录入比赛
+        </h1>
+        <p className="mt-2 text-xs text-muted-foreground max-[760px]:text-[11px]">
+          选择双方阵容，输入最终比分。
+        </p>
+      </div>
+      <RecordForm
+        players={players}
+        initialSlots={initialSlots}
+        matches={matches}
+      />
+    </div>
   );
 }

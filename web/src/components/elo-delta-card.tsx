@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { PlayerAvatar } from "@/components/player-avatar";
-import { TrendingUp, TrendingDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export interface EloDeltaPlayer {
   id: number;
@@ -15,61 +16,44 @@ interface EloDeltaCardProps {
   players: EloDeltaPlayer[];
 }
 
+/** 成功弹层里的四人前后积分与变化列表（mock delta-list） */
 export function EloDeltaCard({ players }: EloDeltaCardProps) {
   return (
-    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-      <h3 className="mb-3 text-center text-base font-semibold text-card-foreground">
-        ELO 变化
-      </h3>
-      <div className="space-y-3">
-        {players.map((player) => {
-          const delta = player.after - player.before;
-          const positive = delta >= 0;
-          return (
-            <div
-              key={player.id}
-              className="flex items-center justify-between rounded-xl bg-muted/50 p-3"
+    <div>
+      {players.map((player) => {
+        const before = Math.round(player.before);
+        const after = Math.round(player.after);
+        const delta = after - before;
+        return (
+          <div
+            key={player.id}
+            className="flex items-center justify-between gap-3 border-t border-border py-3 first:border-t-0"
+          >
+            <Link
+              href={`/players/${player.id}`}
+              className="flex min-w-0 items-center gap-[11px]"
             >
-              <div className="flex items-center gap-3">
-                <PlayerAvatar name={player.name} size="sm" />
-                <span className="font-medium text-card-foreground">
+              <PlayerAvatar name={player.name} size="xs" />
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold text-foreground">
                   {player.name}
                 </span>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="flex flex-col items-end">
-                  <span className="text-xs text-muted-foreground">赛前</span>
-                  <span className="font-semibold tabular-nums text-card-foreground">
-                    {Math.round(player.before)}
-                  </span>
-                </div>
-                <div className="text-muted-foreground">→</div>
-                <div className="flex flex-col items-end">
-                  <span className="text-xs text-muted-foreground">赛后</span>
-                  <span className="font-semibold tabular-nums text-card-foreground">
-                    {Math.round(player.after)}
-                  </span>
-                </div>
-                <div
-                  className={`flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold ${
-                    positive
-                      ? "bg-emerald-100 text-emerald-700"
-                      : "bg-rose-100 text-rose-700"
-                  }`}
-                >
-                  {positive ? (
-                    <TrendingUp className="size-3" />
-                  ) : (
-                    <TrendingDown className="size-3" />
-                  )}
-                  {positive ? "+" : ""}
-                  {Math.round(delta)}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+                <span className="block font-num text-[10px] text-muted-foreground">
+                  {before} → {after} ELO
+                </span>
+              </span>
+            </Link>
+            <span
+              className={cn(
+                "font-num text-xl",
+                delta >= 0 ? "text-win" : "text-loss"
+              )}
+            >
+              {delta > 0 ? `+${delta}` : delta}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
