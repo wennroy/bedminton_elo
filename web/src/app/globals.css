@@ -8,7 +8,7 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-mono: var(--font-mono);
   --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -39,6 +39,24 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  /* COURTSIDE 自定义令牌 */
+  --color-court: var(--court);
+  --color-win: var(--win);
+  --color-win-bg: var(--win-bg);
+  --color-loss: var(--loss);
+  --color-loss-bg: var(--loss-bg);
+  --color-team-a: var(--team-a);
+  --color-team-b: var(--team-b);
+  --color-chart: var(--chart);
+  --color-chart-fill: var(--chart-fill);
+  --color-series-1: var(--series-1);
+  --color-series-2: var(--series-2);
+  --color-series-3: var(--series-3);
+  --color-series-4: var(--series-4);
+  --color-series-5: var(--series-5);
+  --color-series-6: var(--series-6);
+  --color-series-7: var(--series-7);
+  --color-series-8: var(--series-8);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -49,72 +67,124 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  color-scheme: light;
+  /* 字体：平台中文栈 + DIN 类数字栈，无外部字体请求 */
+  --font-sans: "Avenir Next", Avenir, "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas,
+    monospace;
+  --font-num: "DIN Alternate", "Bahnschrift", "Avenir Next Condensed",
+    "Avenir Next", "PingFang SC", sans-serif;
+  /* mock/styles.css 浅色令牌映射进 shadcn 语义变量 */
+  --background: #f4f5f0; /* --bg */
+  --foreground: #242923; /* --ink */
+  --card: #ffffff; /* --surface */
+  --card-foreground: #242923;
+  --popover: #ffffff;
+  --popover-foreground: #242923;
+  --primary: #d3f36b; /* --accent 主操作 */
+  --primary-foreground: #263411; /* --accent-ink */
+  --secondary: #eeefe9; /* --surface-2 */
+  --secondary-foreground: #242923;
+  --muted: #eeefe9;
+  --muted-foreground: #72796f; /* --muted */
+  --accent: #f7f8f3; /* --surface-hover 悬浮底 */
+  --accent-foreground: #242923;
+  --destructive: #ae5548; /* --red */
+  --border: #e2e5dc; /* --line */
+  --input: #e2e5dc;
+  --ring: #4e6c1d; /* --green 焦点框 */
+  --chart-1: #67832a;
+  --chart-2: #3577b1;
+  --chart-3: #ad6441;
+  --chart-4: #8864a2;
+  --chart-5: #218479;
+  --radius: 1rem;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #242923;
+  --sidebar-primary: #d3f36b;
+  --sidebar-primary-foreground: #263411;
+  --sidebar-accent: #f7f8f3;
+  --sidebar-accent-foreground: #242923;
+  --sidebar-border: #e2e5dc;
+  --sidebar-ring: #4e6c1d;
+  /* COURTSIDE 自定义令牌 */
+  --court: #262f29; /* 记分板深底（两主题恒深色） */
+  --win: #4e6c1d; /* --green 胜 / 积分增长 */
+  --win-bg: #ecf3dd;
+  --loss: #ae5548; /* --red 负 / 积分下降 */
+  --loss-bg: #f8ebe7;
+  --team-a: #d3f36b; /* A 队黄绿（记分板） */
+  --team-b: #aacdf8; /* B 队浅蓝（记分板） */
+  --chart: #6c8a32; /* 趋势主线 */
+  --chart-fill: #a7c969;
+  --series-1: #67832a;
+  --series-2: #3577b1;
+  --series-3: #ad6441;
+  --series-4: #8864a2;
+  --series-5: #218479;
+  --series-6: #aa8420;
+  --series-7: #b95874;
+  --series-8: #627787;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  color-scheme: dark;
+  --background: #141815;
+  --foreground: #eff2e9;
+  --card: #1d221e;
+  --card-foreground: #eff2e9;
+  --popover: #1d221e;
+  --popover-foreground: #eff2e9;
+  --primary: #d3f36b;
+  --primary-foreground: #263411;
+  --secondary: #282f28;
+  --secondary-foreground: #eff2e9;
+  --muted: #282f28;
+  --muted-foreground: #a0a99c;
+  --accent: #252b24;
+  --accent-foreground: #eff2e9;
+  --destructive: #efa193;
+  --border: #343c32;
+  --input: #343c32;
+  --ring: #c0dc7c;
+  --chart-1: #cbe975;
+  --chart-2: #8dbbee;
+  --chart-3: #eda77e;
+  --chart-4: #c0a0df;
+  --chart-5: #6dc8b8;
+  --sidebar: #1d221e;
+  --sidebar-foreground: #eff2e9;
+  --sidebar-primary: #d3f36b;
+  --sidebar-primary-foreground: #263411;
+  --sidebar-accent: #252b24;
+  --sidebar-accent-foreground: #eff2e9;
+  --sidebar-border: #343c32;
+  --sidebar-ring: #c0dc7c;
+  --court: #222b24;
+  --win: #c0dc7c;
+  --win-bg: #2b3820;
+  --loss: #efa193;
+  --loss-bg: #422c29;
+  --team-a: #d3f36b;
+  --team-b: #aacdf8;
+  --chart: #d3f36b;
+  --chart-fill: #9eb747;
+  --series-1: #cbe975;
+  --series-2: #8dbbee;
+  --series-3: #eda77e;
+  --series-4: #c0a0df;
+  --series-5: #6dc8b8;
+  --series-6: #e7c666;
+  --series-7: #e28aa3;
+  --series-8: #a4b9c6;
+}
+
+/* 数字排版工具类：DIN 类数字栈 + 等宽数字 */
+@utility font-num {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
 }
 
 @layer base {
