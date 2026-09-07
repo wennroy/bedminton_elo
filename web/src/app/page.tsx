@@ -10,7 +10,7 @@ import {
   signupSummary,
 } from "@/lib/signup";
 import { Leaderboard } from "@/components/leaderboard";
-import { HomeTrend, type PlayerSummaryLite } from "@/components/home-trend";
+import { HomeTrend } from "@/components/home-trend";
 import { WeekMatches } from "@/components/week-matches";
 import { SignupCard } from "@/components/signup-card";
 import { PredictCard } from "@/components/predict-card";
@@ -28,6 +28,12 @@ function getTodayString(): string {
   const m = String(now.getMonth() + 1).padStart(2, "0");
   const d = String(now.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+interface SummaryLite {
+  elo: number;
+  rank: number;
+  weekDelta: number;
 }
 
 export default async function HomePage() {
@@ -54,7 +60,7 @@ export default async function HomePage() {
   }
   const hasHistory = new Set(eloHistory.map((h) => Number(h.playerId)));
 
-  const summaries: Record<number, PlayerSummaryLite> = {};
+  const summaries: Record<number, SummaryLite> = {};
   for (const p of players) {
     const elo = eloOf(p.id);
     summaries[p.id] = {
@@ -121,7 +127,7 @@ export default async function HomePage() {
         />
       </div>
 
-      <HomeTrend history={eloHistory} summaries={summaries} />
+      <HomeTrend history={eloHistory} players={players} variant="compact" />
 
       <div className="grid items-start gap-5 min-[761px]:grid-cols-[1.25fr_1fr] min-[761px]:gap-[22px] min-[1191px]:grid-cols-[1.55fr_1fr]">
         <section className={panelClass}>
