@@ -1,23 +1,33 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { PlayerAvatar } from "@/components/player-avatar";
-import { H2hTable } from "@/components/h2h-table";
-import { PlayerMatchHistory } from "@/components/player-match-history";
-import { FunStats } from "@/components/fun-stats";
-import { Button } from "@/components/ui/button";
+import { ArrowLeft } from "lucide-react";
 import {
   buildStatsData,
-  headToHead,
   playerFunStats,
   playerMatches,
+  playerRelations,
   playerSummary,
 } from "@/lib/stats";
-import { ChevronLeft, Trophy } from "lucide-react";
+import { INITIAL_RATING } from "@/lib/elo";
+import { getWeekRange } from "@/lib/weekly";
+import { ProfileHeader, MoreMetrics } from "@/components/fun-stats";
+import { PlayerTrend, RecentForm } from "@/components/player-trend";
+import { PlayerRelations } from "@/components/player-relations";
+import { PlayerMatchHistory } from "@/components/player-match-history";
+import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
 interface PlayerPageProps {
   params: Promise<{ id: string }>;
+}
+
+function todayString(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 export default async function PlayerPage({ params }: PlayerPageProps) {
@@ -33,66 +43,177 @@ export default async function PlayerPage({ params }: PlayerPageProps) {
     notFound();
   }
 
-  const h2h = headToHead(playerId, data);
-  const matches = playerMatches(playerId, data);
   const funStats = playerFunStats(playerId, data);
+  const matches = playerMatches(playerId, data);
+  const relations = playerRelations(playerId, data);
+
+  // 排名：ELO 降序，同分按 id 升序（与排行榜口径一致）
+  const eloOf = (id: number) =>
+    Math.round(data.ratings.get(id)?.elo ?? INITIAL_RATING);
+  const ordered = [...data.players].sort(
+    (a, b) => eloOf(b.id) - eloOf(a.id) || a.id - b.id
+  );
+  const rank = ordered.findIndex((p) => p.id === playerId) + 1;
+
+  // 本周变化（口径同首页）：当前 ELO − 本周一之前最后一个快照，无快照按初始分
+  const { weekStart } = getWeekRange(todayString());
+  let lastBeforeWeek: number | null = null;
+  let hasHistory = false;
+  const trendPoints: { date: string; elo: number }[] = [];
+  for (const h of data.eloHistory) {
+    if (h.playerId !== String(playerId)) continue;
+    hasHistory = true;
+    trendPoints.push({ date: h.date, elo: h.elo });
+    if (h.date < weekStart) lastBeforeWeek = h.elo;
+  }
+  const currentElo = Math.round(summary.elo);
+  const weekDelta = hasHistory
+    ? currentElo - (lastBeforeWeek ?? INITIAL_RATING)
+    : 0;
+
+  const switcherPlayers = ordered.map((p) => ({
+    id: p.id,
+    name: p.name,
+    elo: eloOf(p.id),
+  }));
+
+  const lastMatchDate = matches[0]?.date;
+  const hasMatches = summary.totalMatches > 0;
+
+  const metricCell =
+    "px-5 py-[17px] min-[761px]:px-[25px] min-[761px]:py-[22px]";
+  const metricLabel = "text-[11px] text-muted-foreground max-[760px]:text-[10px]";
+  const metricValue =
+    "mt-[5px] mb-1 flex items-center gap-[9px] font-num text-[38px] leading-[1.1] text-card-foreground min-[761px]:text-[43px]";
+  const metricUnit = "text-[19px]";
+  const metricSub = "text-[10px] text-muted-foreground max-[760px]:text-[9px]";
 
   return (
-    <main className="min-h-full bg-background px-4 pb-28 pt-4">
-      <div className="mb-4 flex items-center gap-2">
-        <Button variant="ghost" size="icon-sm" asChild>
-          <Link href="/" aria-label="返回">
-            <ChevronLeft className="size-5" />
-          </Link>
-        </Button>
-        <h1 className="text-xl font-bold text-foreground">球员主页</h1>
+    <div className="flex flex-col gap-5 min-[761px]:gap-6">
+      <div>
+        <Link
+          href="/players"
+          className="inline-flex min-h-9 items-center gap-[7px] text-xs text-muted-foreground transition-colors hover:text-win"
+        >
+          <ArrowLeft className="size-[15px]" strokeWidth={1.65} />
+          所有球员
+        </Link>
       </div>
 
-      <section className="mb-6 flex flex-col items-center gap-3 rounded-2xl border border-border bg-card p-6 shadow-sm">
-        <PlayerAvatar name={summary.name} size="lg" />
-        <h2 className="text-2xl font-bold text-card-foreground">
-          {summary.name}
-        </h2>
-        <div className="flex w-full gap-3">
-          <div className="flex flex-1 flex-col items-center rounded-xl bg-muted p-3">
-            <span className="text-xs text-muted-foreground">ELO</span>
-            <span className="text-xl font-bold tabular-nums text-card-foreground">
-              {Math.round(summary.elo)}
+      <ProfileHeader
+        id={playerId}
+        name={summary.name}
+        rank={rank}
+        players={switcherPlayers}
+      />
+
+      <section
+        aria-label="球员核心数据"
+        className="grid grid-cols-2 rounded-2xl border border-border bg-card min-[761px]:grid-cols-[1.2fr_1fr_1fr_1fr]"
+      >
+        <div
+          className={cn(
+            metricCell,
+            "border-border max-[760px]:border-r max-[760px]:border-b min-[761px]:border-r"
+          )}
+        >
+          <div className={metricLabel}>当前 ELO</div>
+          <div className={metricValue}>
+            <span>{currentElo}</span>
+            <span
+              className={cn(
+                "inline-flex items-center rounded-[5px] px-[7px] py-1 font-sans text-[10px] font-bold",
+                weekDelta > 0
+                  ? "bg-win-bg text-win"
+                  : weekDelta < 0
+                    ? "bg-loss-bg text-loss"
+                    : "bg-secondary text-muted-foreground"
+              )}
+            >
+              {weekDelta > 0 ? `+${weekDelta}` : weekDelta}
             </span>
           </div>
-          <div className="flex flex-1 flex-col items-center rounded-xl bg-muted p-3">
-            <span className="text-xs text-muted-foreground">TrueSkill</span>
-            <span className="text-xl font-bold tabular-nums text-card-foreground">
-              {Math.round(summary.mu)}
-            </span>
-            <span className="text-[10px] text-muted-foreground">
-              σ {summary.sigma.toFixed(1)} · 区间 [
-              {Math.round(summary.mu - 3 * summary.sigma)},{" "}
-              {Math.round(summary.mu + 3 * summary.sigma)}]
-            </span>
+          <div className={metricSub}>
+            较 {weekStart.slice(5).replace("-", ".")} 前 · 最高{" "}
+            {funStats.peakElo}
           </div>
         </div>
-        <div className="flex items-center gap-1 text-sm text-muted-foreground">
-          <Trophy className="size-4" />
-          {summary.totalMatches} 场 · {summary.wins} 胜 {summary.losses} 负 · {" "}
-          {summary.winRate}%
+        <div
+          className={cn(
+            metricCell,
+            "border-border max-[760px]:border-b min-[761px]:border-r"
+          )}
+        >
+          <div className={metricLabel}>生涯胜率</div>
+          <div className={metricValue}>
+            {hasMatches ? (
+              <>
+                <span>{summary.winRate}</span>
+                <span className={metricUnit}>%</span>
+              </>
+            ) : (
+              <span>—</span>
+            )}
+          </div>
+          <div className={metricSub}>
+            {summary.wins} 胜 / {summary.losses} 负
+          </div>
+        </div>
+        <div className={cn(metricCell, "border-border max-[760px]:border-r min-[761px]:border-r")}>
+          <div className={metricLabel}>累计出场</div>
+          <div className={metricValue}>
+            <span>{summary.totalMatches}</span>
+            <span className={metricUnit}>场</span>
+          </div>
+          <div className={metricSub}>生涯双打比赛</div>
+        </div>
+        <div className={metricCell}>
+          <div className={metricLabel}>当前状态</div>
+          <div className={metricValue}>
+            {funStats.currentStreakType === "none" ? (
+              <span>—</span>
+            ) : (
+              <>
+                <span>{funStats.currentStreak}</span>
+                <span className={metricUnit}>
+                  连{funStats.currentStreakType === "win" ? "胜" : "负"}
+                </span>
+              </>
+            )}
+          </div>
+          <div className={metricSub}>
+            {lastMatchDate
+              ? `最近一场 · ${lastMatchDate.slice(5).replace("-", ".")}`
+              : "还没有比赛"}
+          </div>
         </div>
       </section>
 
-      <section className="mb-6 flex flex-col gap-3">
-        <h3 className="text-lg font-bold text-foreground">趣味数据</h3>
-        <FunStats stats={funStats} />
-      </section>
+      <div className="grid items-start gap-[18px] min-[761px]:grid-cols-[minmax(0,1.95fr)_minmax(260px,1fr)] min-[761px]:gap-[22px]">
+        <PlayerTrend playerName={summary.name} points={trendPoints} />
+        <RecentForm
+          matches={matches}
+          avgPointDiff={funStats.avgPointDiff}
+          peakElo={funStats.peakElo}
+          currentElo={currentElo}
+        />
+      </div>
 
-      <section className="mb-6 flex flex-col gap-3">
-        <h3 className="text-lg font-bold text-foreground">交锋记录</h3>
-        <H2hTable records={h2h} />
-      </section>
+      <PlayerRelations
+        playerName={summary.name}
+        partners={relations.partners}
+        opponents={relations.opponents}
+      />
 
-      <section className="flex flex-col gap-3">
-        <h3 className="text-lg font-bold text-foreground">参赛历史</h3>
-        <PlayerMatchHistory matches={matches} playerName={summary.name} />
-      </section>
-    </main>
+      <PlayerMatchHistory matches={matches} playerName={summary.name} />
+
+      <MoreMetrics
+        mu={summary.mu}
+        sigma={summary.sigma}
+        longestWinStreak={funStats.longestWinStreak}
+        peakElo={funStats.peakElo}
+        peakEloDate={funStats.peakEloDate}
+      />
+    </div>
   );
 }

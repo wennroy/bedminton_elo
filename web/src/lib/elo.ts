@@ -36,7 +36,7 @@ function ratingOf(playerId: string, ratings: Record<string, number>): number {
 
 function replayMatches(
   matches: Match[],
-  visit?: (teamAWin: number) => void
+  visit?: (teamAWin: number, deltas: Record<string, number>) => void
 ): {
   ratings: Record<string, number>;
   snapshots: EloSnapshot[];
@@ -66,23 +66,30 @@ function replayMatches(
 
     const teamAAvg = (ratings[match.a1] + ratings[match.a2]) / 2;
     const teamBAvg = (ratings[match.b1] + ratings[match.b2]) / 2;
-    visit?.(1 / (1 + 10 ** ((teamBAvg - teamAAvg) / 400)));
+    const teamAWinProb = 1 / (1 + 10 ** ((teamBAvg - teamAAvg) / 400));
 
     const aWins = match.scoreA > match.scoreB;
     const sA = aWins ? 1 : 0;
     const sB = aWins ? 0 : 1;
 
+    const deltas: Record<string, number> = {};
     for (const playerId of [match.a1, match.a2]) {
       const expected =
         1 / (1 + 10 ** ((teamBAvg - ratings[playerId]) / 400));
-      ratings[playerId] += K_DOUBLES * (sA - expected);
+      const delta = K_DOUBLES * (sA - expected);
+      ratings[playerId] += delta;
+      deltas[playerId] = delta;
     }
 
     for (const playerId of [match.b1, match.b2]) {
       const expected =
         1 / (1 + 10 ** ((teamAAvg - ratings[playerId]) / 400));
-      ratings[playerId] += K_DOUBLES * (sB - expected);
+      const delta = K_DOUBLES * (sB - expected);
+      ratings[playerId] += delta;
+      deltas[playerId] = delta;
     }
+
+    visit?.(teamAWinProb, deltas);
   }
 
   recordDayBoundary(lastDate);
@@ -103,4 +110,16 @@ export function computeMatchWinProbs(matches: Match[]): number[] {
     probs.push(teamAWin);
   });
   return probs;
+}
+
+/**
+ * 每场每位上场球员的 ELO 变化，与输入按序一一对应。
+ * 服务端重放输出，不用日期快照差冒充单场变化。
+ */
+export function computeMatchEloDeltas(matches: Match[]): Record<string, number>[] {
+  const out: Record<string, number>[] = [];
+  replayMatches(matches, (_teamAWin, deltas) => {
+    out.push(deltas);
+  });
+  return out;
 }

@@ -3,6 +3,8 @@ import {
   recomputeElos,
   predictElo,
   computeMatchWinProbs,
+  computeMatchEloDeltas,
+  INITIAL_RATING,
   type Match,
 } from "./elo";
 import golden from "../../test/golden/elo.json";
@@ -64,6 +66,49 @@ describe("elo", () => {
         const m = matches[i];
         const expected = predictElo(m.a1, m.a2, m.b1, m.b2, ratings);
         expect(probs[i]).toBeCloseTo(expected.teamAWin, 10);
+      }
+    });
+  });
+
+  describe("computeMatchEloDeltas", () => {
+    it("returns one delta record per match in input order", () => {
+      const deltas = computeMatchEloDeltas(matches);
+      expect(deltas).toHaveLength(matches.length);
+      for (let i = 0; i < matches.length; i++) {
+        const m = matches[i];
+        for (const pid of [m.a1, m.a2, m.b1, m.b2]) {
+          expect(deltas[i][pid]).toBeTypeOf("number");
+        }
+      }
+    });
+
+    it("per-player accumulated deltas match recomputeElos finals", () => {
+      const deltas = computeMatchEloDeltas(matches);
+      const { ratings } = recomputeElos(matches);
+      const sums = new Map<string, number>();
+      for (const record of deltas) {
+        for (const [pid, delta] of Object.entries(record)) {
+          sums.set(pid, (sums.get(pid) ?? 0) + delta);
+        }
+      }
+      for (const [pid, final] of Object.entries(ratings)) {
+        expect(INITIAL_RATING + (sums.get(pid) ?? 0)).toBeCloseTo(final, 6);
+      }
+    });
+
+    it("four-player delta sum is ~0 per match (near zero-sum)", () => {
+      // 全员同分起步时严格零和；队员评分与队均分的偏差会带来微小非零和
+      const two: Match[] = [
+        { date: "2024-01-01", a1: "1", a2: "2", b1: "3", b2: "4", scoreA: 21, scoreB: 18 },
+        { date: "2024-01-01", a1: "1", a2: "2", b1: "3", b2: "4", scoreA: 21, scoreB: 19 },
+      ];
+      for (const record of computeMatchEloDeltas(two)) {
+        const sum = Object.values(record).reduce((a, b) => a + b, 0);
+        expect(sum).toBeCloseTo(0, 10);
+      }
+      for (const record of computeMatchEloDeltas(matches)) {
+        const sum = Object.values(record).reduce((a, b) => a + b, 0);
+        expect(Math.abs(sum)).toBeLessThan(2);
       }
     });
   });

@@ -5,7 +5,7 @@ import {
   type MatchWithNames,
   type Player,
 } from "@/lib/repo";
-import { recomputeElos, INITIAL_RATING, type Match as EloMatch } from "@/lib/elo";
+import { recomputeElos, computeMatchEloDeltas, INITIAL_RATING, type Match as EloMatch } from "@/lib/elo";
 import {
   recomputeTrueSkills,
   TS_MU,
@@ -36,6 +36,8 @@ export interface PlayerMatchRecord {
   scoreFor: number;
   scoreAgainst: number;
   won: boolean;
+  /** 该场 ELO 变化（服务端重放输出，四舍五入到整数） */
+  delta: number;
 }
 
 export interface PlayerSummary {
@@ -162,11 +164,15 @@ export function playerMatches(
   playerId: number,
   data: StatsData
 ): PlayerMatchRecord[] {
+  // 每场 ELO delta 由服务端重放输出；data.matches 升序，与 deltas 按下标对齐
+  const deltas = computeMatchEloDeltas(data.matches.map(toEloMatch));
+  const pid = String(playerId);
   const records: PlayerMatchRecord[] = [];
-  for (const m of data.matches) {
+  data.matches.forEach((m, i) => {
     const teamA = [m.pa1, m.pa2];
     const teamB = [m.pb1, m.pb2];
     const aWon = m.scoreA > m.scoreB;
+    const delta = Math.round(deltas[i]?.[pid] ?? 0);
 
     if (teamA.includes(playerId)) {
       records.push({
@@ -179,6 +185,7 @@ export function playerMatches(
         scoreFor: m.scoreA,
         scoreAgainst: m.scoreB,
         won: aWon,
+        delta,
       });
     } else if (teamB.includes(playerId)) {
       records.push({
@@ -191,9 +198,10 @@ export function playerMatches(
         scoreFor: m.scoreB,
         scoreAgainst: m.scoreA,
         won: !aWon,
+        delta,
       });
     }
-  }
+  });
   return records.reverse();
 }
 
@@ -364,5 +372,76 @@ export function playerFunStats(
     peakElo,
     peakEloDate,
     avgPointDiff: played > 0 ? Math.round((diffSum / played) * 10) / 10 : 0,
+  };
+}
+
+export interface RelationRecord {
+  id: number;
+  name: string;
+  wins: number;
+  losses: number;
+  total: number;
+  /** 我方胜率（整数百分比） */
+  winRate: number;
+}
+
+/**
+ * 搭档 / 对手全量列表（含 <3 场样本）。
+ * 搭档按胜率降序、对手按我方胜率升序（与 bestPartner / nemesis 口径一致，
+ * 因此过滤 ≥3 场后的第一项即黄金搭档 / 值得研究的对手）。
+ */
+export function playerRelations(
+  playerId: number,
+  data: StatsData
+): { partners: RelationRecord[]; opponents: RelationRecord[] } {
+  const partners = new Map<number, RelationRecord>();
+  const opponents = new Map<number, RelationRecord>();
+  const get = (map: Map<number, RelationRecord>, id: number, name: string) => {
+    if (!map.has(id)) {
+      map.set(id, { id, name, wins: 0, losses: 0, total: 0, winRate: 0 });
+    }
+    return map.get(id)!;
+  };
+
+  for (const m of data.matches) {
+    const inA = teamIncludes(m, playerId, "A");
+    const inB = teamIncludes(m, playerId, "B");
+    if (!inA && !inB) continue;
+    const won = (inA && m.scoreA > m.scoreB) || (inB && m.scoreB > m.scoreA);
+
+    const partnerId = inA
+      ? m.pa1 === playerId
+        ? m.pa2
+        : m.pa1
+      : m.pb1 === playerId
+        ? m.pb2
+        : m.pb1;
+    const partner = get(partners, partnerId, nameOf(m, partnerId));
+    partner.total++;
+    if (won) partner.wins++;
+    else partner.losses++;
+
+    for (const oppId of inA ? [m.pb1, m.pb2] : [m.pa1, m.pa2]) {
+      const opp = get(opponents, oppId, nameOf(m, oppId));
+      opp.total++;
+      if (won) opp.wins++;
+      else opp.losses++;
+    }
+  }
+
+  const finish = (r: RelationRecord): RelationRecord => ({
+    ...r,
+    winRate: Math.round((r.wins / r.total) * 100),
+  });
+  const byRawRate = (a: RelationRecord, b: RelationRecord) =>
+    a.wins / a.total - b.wins / b.total;
+
+  return {
+    partners: [...partners.values()]
+      .sort((a, b) => byRawRate(b, a) || b.total - a.total || a.id - b.id)
+      .map(finish),
+    opponents: [...opponents.values()]
+      .sort((a, b) => byRawRate(a, b) || b.total - a.total || a.id - b.id)
+      .map(finish),
   };
 }

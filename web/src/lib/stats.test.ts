@@ -3,6 +3,7 @@ import {
   headToHead,
   playerFunStats,
   playerMatches,
+  playerRelations,
   playerSummary,
   type StatsData,
 } from "./stats";
@@ -99,6 +100,19 @@ describe("stats", () => {
     expect(records[0].date).toBe("2024-01-03");
     expect(records[0].won).toBe(true);
     expect(records[1].won).toBe(false);
+  });
+
+  it("attaches per-match ELO deltas from server replay", () => {
+    const records = playerMatches(1, data);
+    // 最新在前：[m3(胜), m2(负), m1(胜)]；首场全员 1000 起步，胜者每人恰好 +8
+    expect(records[2].delta).toBe(8);
+    expect(records[1].delta).toBeLessThan(0);
+    expect(records[0].delta).toBeGreaterThan(0);
+    for (const r of records) expect(Number.isInteger(r.delta)).toBe(true);
+    // 同一场对手视角符号相反：m3 Dave 失利
+    const dave = playerMatches(4, data);
+    expect(dave[0].won).toBe(false);
+    expect(dave[0].delta).toBeLessThan(0);
   });
 
   it("summarizes player record", () => {
@@ -233,5 +247,61 @@ describe("playerFunStats", () => {
     expect(s.nemesis).toBeNull();
     expect(s.avgPointDiff).toBe(0);
     expect(s.peakElo).toBe(1000);
+  });
+});
+
+describe("playerRelations", () => {
+  it("returns full partner list sorted by win rate desc (including <3 samples)", () => {
+    const { partners } = playerRelations(1, funData);
+    expect(partners).toHaveLength(2);
+    expect(partners[0]).toMatchObject({
+      id: 5,
+      name: "Eve",
+      wins: 3,
+      losses: 0,
+      total: 3,
+      winRate: 100,
+    });
+    expect(partners[1]).toMatchObject({
+      id: 2,
+      name: "Bob",
+      wins: 2,
+      losses: 1,
+      total: 3,
+      winRate: 67,
+    });
+  });
+
+  it("returns full opponent list sorted by our win rate asc (including <3 samples)", () => {
+    const { opponents } = playerRelations(1, funData);
+    expect(opponents).toHaveLength(3);
+    expect(opponents[0]).toMatchObject({
+      id: 4,
+      name: "Dave",
+      wins: 3,
+      losses: 1,
+      total: 4,
+      winRate: 75,
+    });
+    expect(opponents[1]).toMatchObject({ id: 3, total: 6, winRate: 83 });
+    // Bob 只交手 2 场（<3 样本）仍列出，排在最后
+    expect(opponents[2]).toMatchObject({ id: 2, total: 2, winRate: 100 });
+  });
+
+  it(">=3-game heads match playerFunStats bestPartner / nemesis", () => {
+    const { partners, opponents } = playerRelations(1, funData);
+    const fun = playerFunStats(1, funData);
+    expect(partners.filter((p) => p.total >= 3)[0]?.id).toBe(
+      fun.bestPartner?.id
+    );
+    expect(opponents.filter((o) => o.total >= 3)[0]?.id).toBe(
+      fun.nemesis?.id
+    );
+  });
+
+  it("returns empty lists for a player with no matches", () => {
+    const { partners, opponents } = playerRelations(999, funData);
+    expect(partners).toHaveLength(0);
+    expect(opponents).toHaveLength(0);
   });
 });
