@@ -1,0 +1,186 @@
+:root {
+  --series-1: #67832a; --series-2: #3577b1; --series-3: #ad6441; --series-4: #8864a2;
+  --series-5: #218479; --series-6: #aa8420; --series-7: #b95874; --series-8: #627787;
+}
+[data-theme='dark'] {
+  --series-1: #cbe975; --series-2: #8dbbee; --series-3: #eda77e; --series-4: #c0a0df;
+  --series-5: #6dc8b8; --series-6: #e7c666; --series-7: #e28aa3; --series-8: #a4b9c6;
+}
+.quote-heading { display: flex; justify-content: space-between; gap: 25px; align-items: center; padding: 5px 0 28px; }
+.quote-heading .eyebrow { font-size: 11px; letter-spacing: 1px; }
+.quote-date { margin-left: 14px; font-size: 10px; font-weight: 400; letter-spacing: .5px; }
+.quote-heading h1 { font-size: 29px; margin: 13px 0 8px; line-height: 1.6; }
+.quote-credit { font-size: 10px; color: var(--muted); }
+.quote-controls { display: flex; gap: 8px; flex-shrink: 0; }
+.quote-controls .icon-btn { width: 32px; height: 32px; }
+.quote-controls .icon { width: 15px; }
+.overview-summary { min-height: 244px; }
+.overview-summary h2 { margin: 0; font-size: 23px; }
+.summary-rank { font-size: 11px; color: #c4d0bd; }
+.overview-personal-stats { position: relative; display: grid; grid-template-columns: 1fr 1fr 1.2fr; gap: 26px; width: 100%; margin: 24px 0; }
+.overview-personal-stats > div { display: flex; flex-direction: column; }
+.overview-personal-stats span { font-size: 10px; color: #c1cabd; }
+.overview-personal-stats strong { font-weight: 550; font-size: 37px; line-height: 1.4; }
+.overview-personal-stats small { margin-left: 4px; font-size: 14px; font-weight: 400; }
+.summary-link { display: inline-flex; gap: 7px; align-items: center; font-size: 11px; color: #d0d8c9; padding: 10px; position: relative; }
+.summary-link .icon { width: 16px; }
+.signup-preview { padding: 23px 25px; }
+.signup-preview > .btn { width: 100%; margin-top: 20px; }
+.signup-preview-event { display: flex; align-items: center; gap: 18px; margin-top: 19px; }
+.signup-preview-event h3 { font-size: 16px; margin-bottom: 5px; }
+.signup-tally { margin-top: 6px; }
+.signup-tally > strong { font-size: 24px; font-weight: 600; }
+.date-tile { display: flex; align-items: center; flex-direction: column; padding: 8px 17px; background: var(--surface-2); border-radius: 10px; flex-shrink: 0; }
+.date-tile > span { font-size: 9px; color: var(--muted); }
+.date-tile > strong { font-size: 35px; line-height: 1.2; font-weight: 600; }
+.club-trend { padding: 25px; }
+.club-trend.on-overview { margin-bottom: 24px; }
+.club-trend > .panel-heading { margin-bottom: 20px; }
+.club-trend > .panel-heading p { font-size: 10px; margin-top: 5px; }
+.club-chart-toolbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; padding-bottom: 24px; }
+.club-chart-layout { display: grid; grid-template-columns: minmax(0, 1fr) 165px; gap: 22px; }
+.club-chart-plot { min-width: 0; align-self: center; }
+#club-chart-svg { display: block; width: 100%; height: auto; min-height: 250px; }
+#club-chart-svg text { font-family: var(--body-font); font-size: 10px; fill: var(--muted); }
+.club-date-hit { cursor: crosshair; }
+.club-date-hit:focus-visible { outline: none; stroke: var(--green); stroke-width: 1; }
+.club-readout { border-left: 1px solid var(--line); padding-left: 20px; }
+.readout-heading { display: flex; justify-content: space-between; font-size: 9px; color: var(--muted); margin: 2px 0 8px; gap: 8px; }
+.club-value { display: flex; align-items: center; gap: 7px; padding: 7px 0; font-size: 11px; }
+.club-value:hover { color: var(--green); }
+.club-value strong { margin-left: auto; font-size: 17px; font-weight: 500; }
+.value-rank { color: var(--muted); font-size: 10px; min-width: 13px; }
+.series-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--series); flex-shrink: 0; display: inline-block; }
+.club-chart-footer { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin: 17px 0 0; gap: 12px; }
+.club-selector { border-top: 1px solid var(--line); margin-top: 19px; padding-top: 13px; }
+.club-selector h3 { font-size: 11px; color: var(--muted); font-weight: 500; }
+.club-selector .text-link { font-size: 10px; }
+.player-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.player-chip { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 7px 12px; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); font-size: 11px; }
+.player-chip small { font-size: 9px; }
+.player-chip .icon { width: 13px; height: 13px; opacity: 0; }
+.player-chip.selected { color: var(--ink); background: var(--surface-2); }
+.player-chip.selected .icon { opacity: 1; }
+.player-chip:not(.selected) .series-dot { background: var(--muted); opacity: .4; }
+.empty-trend { display: grid; place-items: center; min-height: 265px; color: var(--muted); font-size: 12px; background: var(--surface-2); border-radius: 10px; }
+.session-banner { display: flex; align-items: center; justify-content: space-between; gap: 30px; padding: 28px; margin-bottom: 24px; }
+.session-title { display: flex; align-items: center; gap: 22px; }
+.large-date { background: var(--court); color: #eff5e8; padding: 12px 22px; }
+.large-date > strong { font-size: 48px; color: var(--accent); }
+.large-date > span { color: #c2ccb9; letter-spacing: 1px; }
+.session-title h2 { font-size: 23px; margin-bottom: 10px; }
+.session-title p { margin-top: 5px; }
+.session-title .icon { width: 15px; }
+.session-counts { display: flex; gap: 24px; }
+.session-counts > div { display: flex; flex-direction: column; align-items: center; border-left: 1px solid var(--line); padding-left: 24px; }
+.session-counts .num { font-weight: 500; font-size: 37px; line-height: 1.4; }
+.session-counts span { font-size: 10px; color: var(--muted); }
+.signup-layout { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(290px, 1fr); gap: 24px; align-items: start; }
+.roster-panel { padding: 24px 26px 9px; }
+.roster-labels { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); padding-bottom: 12px; }
+.roster-row { display: flex; align-items: center; gap: 16px; padding: 18px 0; border-top: 1px solid var(--line); }
+.roster-index { font-size: 12px; color: var(--muted); width: 19px; }
+.roster-size { margin-left: auto; font-size: 22px; }
+.roster-size small { font-size: 11px; color: var(--muted); }
+.signup-identity { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--line); padding-top: 19px; gap: 8px; }
+.signup-field-label { margin-top: 23px; color: var(--muted); font-size: 11px; }
+.party-options { display: grid; grid-template-columns: 1fr; gap: 9px; margin-top: 10px; }
+.party-option { display: flex; align-items: center; gap: 13px; border: 1px solid var(--line); border-radius: 9px; padding: 14px; text-align: left; min-height: 70px; }
+.party-option.selected { background: var(--green-bg); border-color: var(--green); }
+.party-option strong { font-size: 12px; font-weight: 550; }
+.party-option small { display: block; color: var(--muted); margin-top: 2px; font-size: 10px; }
+.option-check { display: grid; place-items: center; height: 18px; width: 18px; border: 1px solid var(--muted); border-radius: 50%; }
+.party-option.selected .option-check { background: var(--green); color: var(--surface); border-color: var(--green); }
+.option-check .icon { height: 13px; width: 13px; }
+.signup-submit { width: 100%; margin-top: 18px; min-height: 47px; }
+.signup-confirmed { display: flex; gap: 8px; align-items: center; color: var(--green); font-size: 12px; margin-top: 20px; }
+.signup-confirmed + .signup-submit { margin-top: 12px; }
+.signup-notes { border-top: 1px solid var(--line); margin-top: 24px; padding-top: 18px; }
+.signup-notes h3 { font-size: 11px; font-weight: 500; }
+.signup-notes p { font-size: 10px; color: var(--muted); line-height: 1.9; margin-top: 7px; }
+@media (max-width: 1190px) {
+  .club-chart-layout { grid-template-columns: minmax(0, 1fr) 140px; gap: 15px; }
+  .club-readout { padding-left: 15px; }
+  .club-value { gap: 5px; }
+  .session-banner { padding: 23px; gap: 20px; }
+  .session-counts { gap: 15px; }
+  .session-counts > div { padding-left: 15px; }
+  .session-title { gap: 15px; }
+  .session-title h2 { font-size: 20px; }
+  .signup-layout { grid-template-columns: minmax(0, 1.2fr) minmax(270px, 1fr); gap: 20px; }
+  .overview-personal-stats { gap: 14px; }
+  .overview-summary { padding: 25px; }
+}
+@media (max-width: 850px) and (min-width: 761px) {
+  .session-banner { flex-wrap: wrap; }
+  .session-counts { width: 100%; border-top: 1px solid var(--line); padding-top: 15px; justify-content: space-around; }
+  .session-counts > div { border: none; padding-left: 0; }
+  .overview-personal-stats strong { font-size: 31px; }
+  .signup-preview { padding: 23px 20px; }
+  .signup-preview-event { gap: 12px; }
+}
+@media (max-width: 760px) {
+  .top-actions > button[data-action='identity'] { display: inline-grid; place-items: center; padding: 0; width: 35px; height: 35px; }
+  .top-actions > button[data-action='identity'] .avatar { display: inline-grid; }
+  .quote-heading { position: relative; padding-top: 0; padding-bottom: 23px; gap: 12px; align-items: flex-end; }
+  .quote-heading h1 { font-size: 23px; margin: 11px 0 9px; line-height: 1.6; }
+  .quote-heading .eyebrow { font-size: 10px; }
+  .quote-date { margin-left: 0; display: block; font-size: 9px; margin-top: 4px; }
+  .quote-controls { gap: 5px; position: absolute; right: 0; top: 0; }
+  .quote-controls .icon-btn { width: 29px; height: 29px; }
+  .quote-credit { font-size: 9px; }
+  .overview-summary { min-height: 225px; padding: 22px; }
+  .overview-personal-stats { margin: 20px 0; gap: 18px; }
+  .overview-personal-stats strong { font-size: 34px; }
+  .overview-personal-stats span { font-size: 9px; }
+  .signup-preview { padding: 20px; }
+  .signup-preview-event { gap: 17px; }
+  .signup-preview > .btn { margin-top: 16px; }
+  .club-trend { padding: 19px; }
+  .club-trend.on-overview { margin-bottom: 18px; }
+  .club-trend > .panel-heading { margin-bottom: 16px; }
+  .club-chart-toolbar { gap: 8px; padding-bottom: 17px; }
+  .club-chart-toolbar .segmented button { padding-left: 7px; padding-right: 7px; font-size: 9px; }
+  .club-chart-layout { grid-template-columns: 1fr; gap: 15px; }
+  .club-chart-plot { overflow: hidden; }
+  #club-chart-svg { min-height: 0; }
+  .club-readout { border-left: 0; border-top: 1px solid var(--line); padding: 13px 0 0; }
+  #club-values { display: grid; grid-template-columns: 1fr 1fr; column-gap: 19px; }
+  .club-value { gap: 6px; padding: 6px 0; }
+  .club-value strong { font-size: 17px; }
+  .club-chart-footer { font-size: 9px; margin-top: 15px; }
+  .club-chart-footer > span:last-child { display: none; }
+  .club-selector { margin-top: 15px; padding-top: 9px; }
+  .player-chips { gap: 7px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .player-chip { padding: 7px 9px; gap: 6px; min-height: 38px; font-size: 10px; }
+  .player-chip .icon { width: 11px; margin-left: auto; }
+  .player-chip small { font-size: 8px; }
+  .player-chip .series-dot { height: 6px; width: 6px; }
+  .session-banner { padding: 20px; flex-direction: column; align-items: stretch; gap: 21px; margin-bottom: 18px; }
+  .session-title { gap: 17px; }
+  .large-date { padding: 10px 18px; }
+  .large-date > strong { font-size: 43px; }
+  .session-title h2 { font-size: 20px; }
+  .session-title .small { font-size: 10px; }
+  .session-title p { font-size: 10px; }
+  .session-counts { justify-content: space-between; gap: 0; padding-top: 15px; border-top: 1px solid var(--line); }
+  .session-counts > div { width: 33.33%; padding: 0; }
+  .session-counts > div:first-child { border: none; }
+  .session-counts .num { font-size: 30px; }
+  .session-counts span { font-size: 9px; }
+  .signup-layout { display: flex; flex-direction: column; gap: 18px; }
+  .signup-layout > * { width: 100%; }
+  .signup-action { order: -1; }
+  .party-options { grid-template-columns: 1fr 1fr; gap: 9px; }
+  .party-option { padding: 12px 10px; gap: 9px; }
+  .party-option strong { font-size: 11px; }
+  .party-option small { font-size: 9px; }
+  .signup-notes { margin-top: 20px; padding-top: 15px; }
+  .roster-panel { padding: 20px 20px 7px; }
+  .roster-row { padding: 15px 0; }
+}
+@media (max-width: 380px) {
+  .club-trend { padding: 15px; }
+  .club-chart-toolbar .segmented button { padding-left: 6px; padding-right: 6px; }
+  .player-chip { padding-left: 7px; padding-right: 7px; gap: 5px; }
+}
