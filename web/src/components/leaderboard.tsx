@@ -2,13 +2,12 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { recomputeElos, INITIAL_RATING } from "@/lib/elo";
-import {
-  recomputeTrueSkills,
-  TS_MU,
-  TS_SIGMA,
-} from "@/lib/trueskill";
+import { recomputeTrueSkills, TS_MU, TS_SIGMA } from "@/lib/trueskill";
+import { getMyPlayerId } from "@/lib/identity";
+import { cn } from "@/lib/utils";
 
 interface Player {
   id: number;
@@ -33,9 +32,17 @@ interface MatchWithNames {
   pb2Name: string;
 }
 
+interface LeaderboardSummary {
+  elo: number;
+  rank: number;
+  weekDelta: number;
+}
+
 interface LeaderboardProps {
   players: Player[];
   matches: MatchWithNames[];
+  /** key 为球员 id；近一周涨跌取自 weekDelta */
+  summaries: Record<number, LeaderboardSummary>;
 }
 
 type Tab = "elo" | "trueskill";
@@ -52,17 +59,26 @@ function toEloMatch(m: MatchWithNames) {
   };
 }
 
-export function Leaderboard({ players, matches }: LeaderboardProps) {
+const headerCell =
+  "px-3 pb-3.5 text-left text-[10px] font-medium text-muted-foreground";
+const bodyCell = "border-t border-border px-3 py-[13px] text-xs";
+// 中屏（约 761–1190px）隐藏胜率辅助列
+const optionalCell = "min-[761px]:hidden min-[1191px]:table-cell";
+
+export function Leaderboard({ players, matches, summaries }: LeaderboardProps) {
+  const router = useRouter();
   const [tab, setTab] = React.useState<Tab>("elo");
+  const [myId, setMyId] = React.useState<number | null>(null);
+
+  React.useEffect(() => {
+    setMyId(getMyPlayerId());
+  }, []);
 
   const { eloRatings, tsPlayers, stats } = React.useMemo(() => {
     const eloResult = recomputeElos(matches.map(toEloMatch));
     const tsResult = recomputeTrueSkills(matches.map(toEloMatch));
 
-    const stats = new Map<
-      number,
-      { total: number; wins: number }
-    >();
+    const stats = new Map<number, { total: number; wins: number }>();
     for (const m of matches) {
       for (const id of [m.pa1, m.pa2]) {
         const s = stats.get(id) ?? { total: 0, wins: 0 };
@@ -100,7 +116,8 @@ export function Leaderboard({ players, matches }: LeaderboardProps) {
           sigma,
           total: stat.total,
           wins: stat.wins,
-          winRate: stat.total > 0 ? Math.round((stat.wins / stat.total) * 100) : 0,
+          winRate:
+            stat.total > 0 ? Math.round((stat.wins / stat.total) * 100) : 0,
         };
       })
       .sort((a, b) => {
@@ -110,60 +127,110 @@ export function Leaderboard({ players, matches }: LeaderboardProps) {
   }, [players, eloRatings, tsPlayers, stats, tab]);
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="inline-flex rounded-xl bg-muted p-1">
+    <div className="flex flex-col gap-5">
+      <div className="inline-flex self-start rounded-xl bg-muted p-1">
         <button
           onClick={() => setTab("elo")}
-          className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
+          className={cn(
+            "rounded-lg px-4 py-1.5 text-xs font-medium transition-all",
             tab === "elo"
               ? "bg-background text-foreground shadow-sm"
               : "text-muted-foreground hover:text-foreground"
-          }`}
+          )}
         >
           ELO
         </button>
         <button
           onClick={() => setTab("trueskill")}
-          className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
+          className={cn(
+            "rounded-lg px-4 py-1.5 text-xs font-medium transition-all",
             tab === "trueskill"
               ? "bg-background text-foreground shadow-sm"
               : "text-muted-foreground hover:text-foreground"
-          }`}
+          )}
         >
           TrueSkill
         </button>
       </div>
 
-      <div className="space-y-2">
-        {rows.map((row, index) => (
-          <Link
-            key={row.id}
-            href={`/players/${row.id}`}
-            className="flex items-center gap-3 rounded-2xl border border-border bg-card p-3 shadow-sm transition-colors hover:bg-muted/30"
-          >
-            <div className="flex w-8 justify-center text-lg font-bold text-muted-foreground">
-              {index + 1}
-            </div>
-            <PlayerAvatar name={row.name} size="sm" />
-            <div className="flex flex-1 flex-col">
-              <span className="font-medium text-card-foreground">
-                {row.name}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {row.total} 场 · {row.wins} 胜 · {row.winRate}%
-              </span>
-            </div>
-            <div className="text-right">
-              <div className="text-xl font-bold tabular-nums text-card-foreground">
-                {Math.round(tab === "elo" ? row.elo : row.mu)}
-              </div>
-              <div className="text-[10px] text-muted-foreground">
-                {tab === "trueskill" && `±${row.sigma.toFixed(1)}`}
-              </div>
-            </div>
-          </Link>
-        ))}
-      </div>
+      <table className="w-full border-collapse">
+        <thead>
+          <tr>
+            <th className={cn(headerCell, "w-[34px] pl-0")}>#</th>
+            <th className={headerCell}>球员</th>
+            <th className={cn(headerCell, optionalCell)}>胜率</th>
+            <th className={headerCell}>{tab === "elo" ? "ELO" : "μ"}</th>
+            {tab === "elo" && (
+              <th className={cn(headerCell, "pr-0 text-right")}>近一周</th>
+            )}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, index) => {
+            const isMe = row.id === myId;
+            const delta = summaries[row.id]?.weekDelta ?? 0;
+            return (
+              <tr
+                key={row.id}
+                onClick={() => router.push(`/players/${row.id}`)}
+                className={cn(
+                  "cursor-pointer",
+                  isMe
+                    ? "[&>td]:bg-win-bg [&>td:first-child]:rounded-l-[7px] [&>td:first-child]:pl-2 [&>td:last-child]:rounded-r-[7px] [&>td:last-child]:pr-2"
+                    : "hover:bg-accent"
+                )}
+              >
+                <td
+                  className={cn(
+                    bodyCell,
+                    "pl-0 font-num text-muted-foreground"
+                  )}
+                >
+                  {String(index + 1).padStart(2, "0")}
+                </td>
+                <td className={bodyCell}>
+                  <Link
+                    href={`/players/${row.id}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex items-center gap-2.5 font-medium text-card-foreground transition-colors hover:text-win"
+                  >
+                    <PlayerAvatar
+                      name={row.name}
+                      size="xs"
+                      className="size-[29px] text-[11px]"
+                    />
+                    <span className="truncate">{row.name}</span>
+                  </Link>
+                </td>
+                <td className={cn(bodyCell, optionalCell, "text-muted-foreground")}>
+                  {row.winRate}%
+                </td>
+                <td className={bodyCell}>
+                  <span className="font-num text-lg text-card-foreground">
+                    {Math.round(tab === "elo" ? row.elo : row.mu)}
+                  </span>
+                </td>
+                {tab === "elo" && (
+                  <td className={cn(bodyCell, "pr-0 text-right")}>
+                    <span
+                      className={cn(
+                        "font-num",
+                        delta > 0
+                          ? "text-win"
+                          : delta < 0
+                            ? "text-loss"
+                            : "text-muted-foreground"
+                      )}
+                    >
+                      {delta > 0 ? `+${delta}` : delta < 0 ? delta : "±0"}
+                    </span>
+                  </td>
+                )}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }

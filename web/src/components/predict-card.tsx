@@ -1,20 +1,23 @@
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 export function PredictCard() {
   return (
     <Link
       href="/predict"
-      className="flex items-center justify-between rounded-2xl border border-border bg-card p-4 shadow-sm transition-colors hover:bg-muted/30"
+      className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-card p-5 transition-colors hover:bg-accent"
     >
-      <div className="flex flex-col gap-1">
-        <span className="font-medium text-card-foreground">
-          🔮 胜率预测 · 任选 4 人，看看哪队更强
-        </span>
+      <div>
+        <h2 className="text-base font-semibold text-card-foreground">
+          胜率预测
+        </h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          任选四位球员分边，看看哪队更强
+        </p>
       </div>
-      <span className="flex items-center text-sm font-medium text-primary">
+      <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
         去预测
-        <ChevronRight className="size-4" />
+        <ArrowRight className="size-4" strokeWidth={1.65} />
       </span>
     </Link>
   );
