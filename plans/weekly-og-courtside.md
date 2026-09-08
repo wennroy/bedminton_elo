@@ -38,7 +38,7 @@
   - 要点：按 1080×1920 等比（浏览器内可 scale 预览）画出确认后可直接翻译的版式：头部（🏸/俱乐部名「卷技术小分队」+ 第 N 周战报大标题 + 日期区间，lime accent 点缀）→ 三榜各 top3（大数字榜行：名次徽标 + 姓名 + 大数字，行间细分隔线；ELO 榜涨跌带 win/loss 色）→ 最佳组合横幅（可沿用深色 `--court #262f29` 横条作视觉锚点，与网页摘要卡/记分板同源）→ 本周趣闻单列数据行（🎯胶着/💥惨案/🔥连胜王/😱冷门，胜者先行比分大行 + 一行说明）→ 底部（QR 占位方块 + 「扫码查看完整排行榜」+ 域名 + 俱乐部副标题）。可 `<link>` 复用 `mock/styles.css` 的令牌变量；布局只用 flex（Satori 子集），不用 grid。设计稿里放两套数据示例：中文名 + 罗马字长名（11 字符级）各一组，确认截断与换行表现。
   - verify: [人工] 浏览器打开 `mock/weekly-share.html`，用户确认整体版式与细节（可当场改稿迭代）
 
-- [ ] T2 route.tsx 按设计稿重写 [顺序]
+- [x] T2 route.tsx 按设计稿重写 [顺序]
   - 改动：`web/src/app/api/og/weekly/route.tsx`（重写）
   - 要点：把 T1 确认稿逐块翻译成 Satori JSX，颜色/字号/间距全部字面值内联（对照 globals.css 浅色组，不用 var()）。保留不动：`truncate()`、ETag/no-cache/304 短路、`weeklyDataVersion`、QRCode.toDataURL、GET 参数校验、1080×1920。多列结构用固定 width 不用 flex:1；每个含子元素的 div 显式 display:flex。趣闻行沿用「胜者先行 + 比分」两行结构改单列数据行样式。`route.test.ts` 只断言状态码/headers/ETag，不应需要改；若设计微调导致断像素级假设（没有这类断言）再说。本地审图方式：`pnpm dev` 后访问 `/api/og/weekly?week=2026-09-01`（本地 dummy 库上周约 18 场，三榜+趣闻齐全）与 `?week=2026-09-07`（本周 6 场）各存一张 PNG。
   - verify: `cd web && pnpm test -- src/app/api/og/weekly && pnpm lint && pnpm build`；[人工] 两张本地 PNG 对照设计稿逐块核对（含罗马字长名截断——可临时把 dummy 球员改名或用长名用例核对）
