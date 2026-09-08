@@ -1,3 +1,5 @@
 __pycache__/
 *.pyc
 badminton.db
+badminton.db-shm
+badminton.db-wal
