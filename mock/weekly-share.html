@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>周报分享图 · 设计稿</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  body { padding: 40px; }
+  .preview-row { display: flex; gap: 48px; align-items: flex-start; flex-wrap: wrap; }
+  .preview-item { display: flex; flex-direction: column; gap: 12px; }
+  .preview-label { font-size: 13px; font-weight: 650; }
+  .poster-viewport { width: 432px; height: 768px; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; }
+  .poster-scale { transform: scale(0.4); transform-origin: top left; }
+
+  /* ===== 以下全部对应 Satori 可翻译的 flex 结构,字面值即 globals.css 浅色令牌 ===== */
+  .poster {
+    width: 1080px; height: 1920px; background: var(--bg); color: var(--ink);
+    padding: 64px; display: flex; flex-direction: column; font-family: var(--body-font);
+  }
+
+  /* 头部 */
+  .p-header { display: flex; align-items: center; gap: 28px; }
+  .p-mark {
+    width: 100px; height: 100px; border-radius: 28px; background: var(--accent); color: var(--accent-ink);
+    display: flex; align-items: center; justify-content: center; font-size: 52px; transform: rotate(-7deg);
+  }
+  .p-header-text { display: flex; flex-direction: column; }
+  .p-eyebrow { font-size: 26px; font-weight: 700; letter-spacing: 8px; color: var(--muted); }
+  .p-title { font-size: 68px; font-weight: 800; letter-spacing: -2px; margin-top: 8px; }
+  .p-dates { font-family: var(--number-font); font-size: 30px; color: var(--muted); margin-top: 12px; letter-spacing: 1px; }
+  .p-accent-bar { width: 120px; height: 10px; border-radius: 5px; background: var(--accent); margin-top: 20px; }
+
+  /* 三榜:大数字榜行 + 细分隔线 */
+  .p-boards { display: flex; margin-top: 40px; }
+  .p-board { display: flex; flex-direction: column; width: 300px; }
+  .p-board + .p-board { border-left: 2px solid var(--line); padding-left: 26px; margin-left: 26px; }
+  .p-board-title { font-size: 30px; font-weight: 750; letter-spacing: -0.5px; }
+  .p-board-sub { font-size: 20px; font-weight: 700; letter-spacing: 3px; color: var(--muted); margin-top: 6px; }
+  .p-rows { display: flex; flex-direction: column; margin-top: 20px; }
+  .p-row { display: flex; align-items: center; padding: 12px 0; }
+  .p-row + .p-row { border-top: 2px solid var(--line); }
+  .p-rank {
+    width: 48px; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center;
+    font-family: var(--number-font); font-size: 24px; font-weight: 800;
+    background: var(--surface-2); color: var(--muted); flex-shrink: 0;
+  }
+  .p-rank.first { background: var(--accent); color: var(--accent-ink); }
+  .p-name { font-size: 28px; font-weight: 650; margin-left: 16px; white-space: nowrap; max-width: 168px; overflow: hidden; text-overflow: ellipsis; }
+  .p-value { margin-left: auto; font-family: var(--number-font); font-size: 40px; font-weight: 800; letter-spacing: -1px; display: flex; align-items: baseline; gap: 6px; flex-shrink: 0; }
+  .p-unit { font-size: 22px; font-weight: 600; color: var(--muted); font-family: var(--body-font); letter-spacing: 0; }
+  .p-value.up { color: var(--green); }
+  .p-value.down { color: var(--red); }
+
+  /* 最佳组合:深色 court 横条(与记分板/摘要卡同源) */
+  .p-best {
+    display: flex; align-items: center; margin-top: 40px; border-radius: 32px;
+    background: var(--court); padding: 32px 48px;
+  }
+  .p-best-left { display: flex; flex-direction: column; width: 620px; }
+  .p-best-label { font-size: 24px; font-weight: 700; letter-spacing: 4px; color: rgba(255,255,255,0.6); }
+  .p-best-names { font-size: 50px; font-weight: 800; color: #ffffff; margin-top: 12px; white-space: nowrap; }
+  .p-best-record { font-size: 28px; color: rgba(255,255,255,0.85); margin-top: 12px; font-family: var(--number-font); }
+  .p-best-right { display: flex; flex-direction: column; align-items: flex-end; margin-left: auto; }
+  .p-best-rate { font-family: var(--number-font); font-size: 84px; font-weight: 800; color: var(--accent); letter-spacing: -2px; }
+  .p-best-rate-label { font-size: 24px; color: rgba(255,255,255,0.6); margin-top: 4px; }
+
+  /* 趣闻:单列数据行 */
+  .p-fun { display: flex; flex-direction: column; margin-top: 40px; }
+  .p-section-label { font-size: 22px; font-weight: 700; letter-spacing: 4px; color: var(--muted); }
+  .p-fun-rows { display: flex; flex-direction: column; margin-top: 4px; }
+  .p-fun-row { display: flex; align-items: center; padding: 14px 0; }
+  .p-fun-row + .p-fun-row { border-top: 2px solid var(--line); }
+  .p-fun-ico {
+    width: 60px; height: 60px; border-radius: 18px; background: var(--surface);
+    border: 2px solid var(--line); display: flex; align-items: center; justify-content: center; font-size: 30px;
+  }
+  .p-fun-main { display: flex; flex-direction: column; margin-left: 20px; width: 640px; }
+  .p-fun-label { display: flex; align-items: baseline; gap: 14px; font-size: 24px; font-weight: 700; }
+  .p-fun-date { font-family: var(--number-font); font-size: 20px; font-weight: 500; color: var(--muted); }
+  .p-fun-match { font-size: 28px; font-weight: 700; margin-top: 6px; white-space: nowrap; }
+  .p-fun-match .score { font-family: var(--number-font); font-weight: 800; letter-spacing: -0.5px; }
+  .p-fun-sub { font-size: 22px; color: var(--muted); margin-top: 4px; white-space: nowrap; }
+  .p-fun-note { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; }
+  .p-fun-num { font-family: var(--number-font); font-size: 52px; font-weight: 800; letter-spacing: -1px; }
+  .p-fun-num-label { font-size: 20px; color: var(--muted); margin-top: 2px; }
+
+  /* 底部 */
+  .p-footer { display: flex; align-items: center; margin-top: auto; padding-top: 24px; }
+  .p-qr {
+    width: 174px; height: 174px; background: var(--surface); border: 2px solid var(--line);
+    border-radius: 22px; display: flex; align-items: center; justify-content: center;
+  }
+  .p-qr-placeholder { width: 150px; height: 150px; background:
+      repeating-conic-gradient(var(--ink) 0% 25%, #fff 0% 50%) 0 0 / 30px 30px; border-radius: 6px; }
+  .p-footer-text { display: flex; flex-direction: column; margin-left: 30px; }
+  .p-footer-title { font-size: 34px; font-weight: 750; }
+  .p-footer-domain { font-family: var(--number-font); font-size: 26px; color: var(--muted); margin-top: 8px; }
+  .p-footer-sub { font-size: 20px; color: var(--muted); margin-top: 14px; }
+</style>
+</head>
+<body>
+  <p class="muted" style="margin-bottom: 24px;">1080×1920 等比缩放 0.4 预览 · 两组数据用例（中文名 / 罗马字长名）· 布局只用 flex,可直翻 Satori</p>
+  <div class="preview-row">
+
+    <!-- 用例 A:中文名 -->
+    <div class="preview-item">
+      <div class="preview-label">A · 中文名（本地 dummy 数据形态）</div>
+      <div class="poster-viewport"><div class="poster-scale"><div class="poster">
+
+        <div class="p-header">
+          <div class="p-mark">🏸</div>
+          <div class="p-header-text">
+            <div class="p-eyebrow">卷技术小分队 · WEEKLY REPORT</div>
+            <div class="p-title">第 37 周战报</div>
+            <div class="p-dates">2026.09.07 — 09.13</div>
+          </div>
+        </div>
+        <div class="p-accent-bar"></div>
+
+        <div class="p-boards">
+          <div class="p-board">
+            <div class="p-board-title">出勤榜</div>
+            <div class="p-board-sub">ATTENDANCE</div>
+            <div class="p-rows">
+              <div class="p-row"><div class="p-rank first">01</div><div class="p-name">王强</div><div class="p-value">6<span class="p-unit">场</span></div></div>
+              <div class="p-row"><div class="p-rank">02</div><div class="p-name">周婷</div><div class="p-value">5<span class="p-unit">场</span></div></div>
+              <div class="p-row"><div class="p-rank">03</div><div class="p-name">杨帆</div><div class="p-value">5<span class="p-unit">场</span></div></div>
+            </div>
+          </div>
+          <div class="p-board">
+            <div class="p-board-title">战绩王</div>
+            <div class="p-board-sub">MOST WINS</div>
+            <div class="p-rows">
+              <div class="p-row"><div class="p-rank first">01</div><div class="p-name">王强</div><div class="p-value">5<span class="p-unit">胜</span></div></div>
+              <div class="p-row"><div class="p-rank">02</div><div class="p-name">刘洋</div><div class="p-value">4<span class="p-unit">胜</span></div></div>
+              <div class="p-row"><div class="p-rank">03</div><div class="p-name">周婷</div><div class="p-value">3<span class="p-unit">胜</span></div></div>
+            </div>
+          </div>
+          <div class="p-board">
+            <div class="p-board-title">ELO 涨跌榜</div>
+            <div class="p-board-sub">ELO CHANGE</div>
+            <div class="p-rows">
+              <div class="p-row"><div class="p-rank first">01</div><div class="p-name">刘洋</div><div class="p-value up">+22</div></div>
+              <div class="p-row"><div class="p-rank">02</div><div class="p-name">吴磊</div><div class="p-value up">+13</div></div>
+              <div class="p-row"><div class="p-rank">03</div><div class="p-name">张伟</div><div class="p-value up">+5</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="p-best">
+          <div class="p-best-left">
+            <div class="p-best-label">最佳组合 · BEST PAIR</div>
+            <div class="p-best-names">王强 / 周婷</div>
+            <div class="p-best-record">4 胜 1 负</div>
+          </div>
+          <div class="p-best-right">
+            <div class="p-best-rate">80%</div>
+            <div class="p-best-rate-label">胜率</div>
+          </div>
+        </div>
+
+        <div class="p-fun">
+          <div class="p-section-label">本周趣闻 · HIGHLIGHTS</div>
+          <div class="p-fun-rows">
+            <div class="p-fun-row">
+              <div class="p-fun-ico">🎯</div>
+              <div class="p-fun-main">
+                <div class="p-fun-label">最胶着一战<span class="p-fun-date">09.03</span></div>
+                <div class="p-fun-match">陈静 / 黄磊&nbsp;&nbsp;<span class="score">24 : 22</span></div>
+                <div class="p-fun-sub">击败 张伟 / 周婷</div>
+              </div>
+              <div class="p-fun-note"><div class="p-fun-num">2<span style="font-size:24px; font-weight:600;"> 分</span></div><div class="p-fun-num-label">分差</div></div>
+            </div>
+            <div class="p-fun-row">
+              <div class="p-fun-ico">💥</div>
+              <div class="p-fun-main">
+                <div class="p-fun-label">本周惨案<span class="p-fun-date">09.07</span></div>
+                <div class="p-fun-match">王强 / 赵敏&nbsp;&nbsp;<span class="score">21 : 8</span></div>
+                <div class="p-fun-sub">击败 张伟 / 陈静</div>
+              </div>
+              <div class="p-fun-note"><div class="p-fun-num">13<span style="font-size:24px; font-weight:600;"> 分</span></div><div class="p-fun-num-label">净胜</div></div>
+            </div>
+            <div class="p-fun-row">
+              <div class="p-fun-ico">🔥</div>
+              <div class="p-fun-main">
+                <div class="p-fun-label">周连胜王</div>
+                <div class="p-fun-match">王强</div>
+                <div class="p-fun-sub">本周未逢败绩</div>
+              </div>
+              <div class="p-fun-note"><div class="p-fun-num">5<span style="font-size:24px; font-weight:600;"> 连胜</span></div><div class="p-fun-num-label">当前</div></div>
+            </div>
+            <div class="p-fun-row">
+              <div class="p-fun-ico">😱</div>
+              <div class="p-fun-main">
+                <div class="p-fun-label">本周最大冷门<span class="p-fun-date">09.01</span></div>
+                <div class="p-fun-match">吴磊 / 张伟&nbsp;&nbsp;<span class="score">21 : 19</span></div>
+                <div class="p-fun-sub">击败 王强 / 刘洋</div>
+              </div>
+              <div class="p-fun-note"><div class="p-fun-num" style="color:var(--red);">21%</div><div class="p-fun-num-label">赛前胜率</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="p-footer">
+          <div class="p-qr"><div class="p-qr-placeholder"></div></div>
+          <div class="p-footer-text">
+            <div class="p-footer-title">扫码查看完整排行榜</div>
+            <div class="p-footer-domain">bedminton.wennroy.com</div>
+            <div class="p-footer-sub">卷技术小分队 · 羽毛球双打 ELO 排行榜</div>
+          </div>
+        </div>
+
+      </div></div></div>
+    </div>
+
+    <!-- 用例 B:罗马字长名 -->
+    <div class="preview-item">
+      <div class="preview-label">B · 罗马字长名（线上数据形态,11 字符级）</div>
+      <div class="poster-viewport"><div class="poster-scale"><div class="poster">
+
+        <div class="p-header">
+          <div class="p-mark">🏸</div>
+          <div class="p-header-text">
+            <div class="p-eyebrow">卷技术小分队 · WEEKLY REPORT</div>
+            <div class="p-title">第 37 周战报</div>
+            <div class="p-dates">2026.09.07 — 09.13</div>
+          </div>
+        </div>
+        <div class="p-accent-bar"></div>
+
+        <div class="p-boards">
+          <div class="p-board">
+            <div class="p-board-title">出勤榜</div>
+            <div class="p-board-sub">ATTENDANCE</div>
+            <div class="p-rows">
+              <div class="p-row"><div class="p-rank first">01</div><div class="p-name">taco knight</div><div class="p-value">6<span class="p-unit">场</span></div></div>
+              <div class="p-row"><div class="p-rank">02</div><div class="p-name">badminton boi</div><div class="p-value">5<span class="p-unit">场</span></div></div>
+              <div class="p-row"><div class="p-rank">03</div><div class="p-name">royyy</div><div class="p-value">5<span class="p-unit">场</span></div></div>
+            </div>
+          </div>
+          <div class="p-board">
+            <div class="p-board-title">战绩王</div>
+            <div class="p-board-sub">MOST WINS</div>
+            <div class="p-rows">
+              <div class="p-row"><div class="p-rank first">01</div><div class="p-name">taco knight</div><div class="p-value">5<span class="p-unit">胜</span></div></div>
+              <div class="p-row"><div class="p-rank">02</div><div class="p-name">smash bro</div><div class="p-value">4<span class="p-unit">胜</span></div></div>
+              <div class="p-row"><div class="p-rank">03</div><div class="p-name">royyy</div><div class="p-value">3<span class="p-unit">胜</span></div></div>
+            </div>
+          </div>
+          <div class="p-board">
+            <div class="p-board-title">ELO 涨跌榜</div>
+            <div class="p-board-sub">ELO CHANGE</div>
+            <div class="p-rows">
+              <div class="p-row"><div class="p-rank first">01</div><div class="p-name">drop shot</div><div class="p-value up">+22</div></div>
+              <div class="p-row"><div class="p-rank">02</div><div class="p-name">netkiller</div><div class="p-value up">+13</div></div>
+              <div class="p-row"><div class="p-rank">03</div><div class="p-name">clearchannel</div><div class="p-value up">+5</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="p-best">
+          <div class="p-best-left">
+            <div class="p-best-label">最佳组合 · BEST PAIR</div>
+            <div class="p-best-names">taco knight / royyy</div>
+            <div class="p-best-record">4 胜 1 负</div>
+          </div>
+          <div class="p-best-right">
+            <div class="p-best-rate">80%</div>
+            <div class="p-best-rate-label">胜率</div>
+          </div>
+        </div>
+
+        <div class="p-fun">
+          <div class="p-section-label">本周趣闻 · HIGHLIGHTS</div>
+          <div class="p-fun-rows">
+            <div class="p-fun-row">
+              <div class="p-fun-ico">🎯</div>
+              <div class="p-fun-main">
+                <div class="p-fun-label">最胶着一战<span class="p-fun-date">09.03</span></div>
+                <div class="p-fun-match">taco knight / netkiller&nbsp;&nbsp;<span class="score">24 : 22</span></div>
+                <div class="p-fun-sub">击败 smash bro / royyy</div>
+              </div>
+              <div class="p-fun-note"><div class="p-fun-num">2<span style="font-size:24px; font-weight:600;"> 分</span></div><div class="p-fun-num-label">分差</div></div>
+            </div>
+            <div class="p-fun-row">
+              <div class="p-fun-ico">💥</div>
+              <div class="p-fun-main">
+                <div class="p-fun-label">本周惨案<span class="p-fun-date">09.07</span></div>
+                <div class="p-fun-match">taco knight / jay&nbsp;&nbsp;<span class="score">21 : 8</span></div>
+                <div class="p-fun-sub">击败 badminton boi / sam</div>
+              </div>
+              <div class="p-fun-note"><div class="p-fun-num">13<span style="font-size:24px; font-weight:600;"> 分</span></div><div class="p-fun-num-label">净胜</div></div>
+            </div>
+            <div class="p-fun-row">
+              <div class="p-fun-ico">🔥</div>
+              <div class="p-fun-main">
+                <div class="p-fun-label">周连胜王</div>
+                <div class="p-fun-match">taco knight</div>
+                <div class="p-fun-sub">本周未逢败绩</div>
+              </div>
+              <div class="p-fun-note"><div class="p-fun-num">5<span style="font-size:24px; font-weight:600;"> 连胜</span></div><div class="p-fun-num-label">当前</div></div>
+            </div>
+            <div class="p-fun-row">
+              <div class="p-fun-ico">😱</div>
+              <div class="p-fun-main">
+                <div class="p-fun-label">本周最大冷门<span class="p-fun-date">09.01</span></div>
+                <div class="p-fun-match">clearchannel / sam&nbsp;&nbsp;<span class="score">21 : 19</span></div>
+                <div class="p-fun-sub">击败 taco knight / royyy</div>
+              </div>
+              <div class="p-fun-note"><div class="p-fun-num" style="color:var(--red);">21%</div><div class="p-fun-num-label">赛前胜率</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="p-footer">
+          <div class="p-qr"><div class="p-qr-placeholder"></div></div>
+          <div class="p-footer-text">
+            <div class="p-footer-title">扫码查看完整排行榜</div>
+            <div class="p-footer-domain">bedminton.wennroy.com</div>
+            <div class="p-footer-sub">卷技术小分队 · 羽毛球双打 ELO 排行榜</div>
+          </div>
+        </div>
+
+      </div></div></div>
+    </div>
+
+  </div>
+</body>
+</html>
