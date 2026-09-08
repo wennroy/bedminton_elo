@@ -61,10 +61,11 @@ export function WeeklyView({ stats, weekStarts }: WeeklyViewProps) {
     }, 120);
 
     try {
-      // v=2:一次性破缓存。旧版本接口响应带 immutable 一年缓存,浏览器按
-      // 完整 URL 作 key 存了旧图且永不回源;换个 URL key 规避存量条目。
-      // 此后新鲜度由服务端 ETag 协商保证(no-cache + 304)。
-      const res = await fetch(`/api/og/weekly?week=${stats.weekStart}&v=2`);
+      // v=3:一次性破缓存。旧版本接口响应带 immutable 一年缓存,浏览器按
+      // 完整 URL 作 key 存了旧图且永不回源;v=2 的存量条目又碰上「ETag 只
+      // 指纹数据」的 304 陷阱(数据没变 → 回旧设计图)。换 URL key 规避存量
+      // 条目,此后新鲜度由服务端 ETag 协商保证(no-cache + 数据&设计双指纹)。
+      const res = await fetch(`/api/og/weekly?week=${stats.weekStart}&v=3`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
       stopProgressTimer();

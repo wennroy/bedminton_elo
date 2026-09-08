@@ -6,6 +6,7 @@ import {
   buildWeeklyStats,
   getWeekRange,
   weeklyDataVersion,
+  OG_DESIGN_VERSION,
   type FunMatch,
   type UpsetMatch,
   type WeeklyStats,
@@ -737,7 +738,7 @@ export async function GET(request: Request) {
     // 协商缓存:指纹不变 → 304 短路,跳过 QR 生成与 Satori 渲染。
     // no-cache = 允许存储但每次用前必须回源校验,取代 ImageResponse
     // 默认的 immutable 一年缓存(那正是数据更新后仍出旧图的根因)。
-    const etag = `"${weeklyDataVersion(stats)}"`;
+    const etag = `"${weeklyDataVersion(stats)}-${OG_DESIGN_VERSION}"`;
     const cacheHeaders = { "Cache-Control": "no-cache", ETag: etag };
     if (request.headers.get("if-none-match") === etag) {
       return new Response(null, { status: 304, headers: cacheHeaders });

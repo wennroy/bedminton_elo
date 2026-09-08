@@ -141,6 +141,11 @@ export function weeklyDataVersion(stats: WeeklyStats): string {
     .slice(0, 16);
 }
 
+// 分享图的设计指纹:版式/配色变更时递增。ETag 只指纹数据时,数据未变的周
+// 在换版式后仍会对旧缓存 304,客户端永远显示旧设计(v1.5.1 踩过的坑)。
+// 放在 lib 是因为 route 文件只允许导出 HTTP 方法,build 期类型检查会拦。
+export const OG_DESIGN_VERSION = "d2";
+
 export function computeWeeklyStats(
   weekStart: string,
   players: { id: number; name: string }[],

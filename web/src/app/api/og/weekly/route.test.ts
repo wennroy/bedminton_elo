@@ -4,7 +4,7 @@ import { join } from "path";
 import { unlinkSync } from "fs";
 import { closeDb } from "@/lib/db";
 import { addPlayer, addMatch } from "@/lib/repo";
-import { buildWeeklyStats, getWeekRange, weeklyDataVersion } from "@/lib/weekly";
+import { buildWeeklyStats, getWeekRange, weeklyDataVersion, OG_DESIGN_VERSION } from "@/lib/weekly";
 import { GET } from "./route";
 
 function createRequest(week: string, ifNoneMatch?: string): Request {
@@ -33,7 +33,7 @@ function seedFourPlayers() {
 }
 
 function currentEtag(): string {
-  return `"${weeklyDataVersion(buildWeeklyStats(WEEK))}"`;
+  return `"${weeklyDataVersion(buildWeeklyStats(WEEK))}-${OG_DESIGN_VERSION}"`;
 }
 
 describe.sequential("og/weekly API", () => {
