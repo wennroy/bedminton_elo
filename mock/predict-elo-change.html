@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>预测结果面板 · 设计稿</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  body { padding: 40px 16px; }
+  .page { max-width: 430px; margin: 0 auto; display: flex; flex-direction: column; gap: 46px; }
+  .preview-label { font-size: 13px; font-weight: 650; margin-bottom: 12px; }
+
+  /* ===== 预测结果面板(对应 /predict 结果区,浅色令牌直取 styles.css) ===== */
+  .predict { padding: 20px; }
+
+  /* 顶部双向胜率条:A 队 lime #d3f36b(var(--accent))→ B 队浅蓝 #aacdf8,按胜率填充 */
+  .pp-bar-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 9px; }
+  .pp-bar-side { display: flex; align-items: center; gap: 7px; min-width: 0; }
+  .pp-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .pp-dot.a { background: var(--accent); }
+  .pp-dot.b { background: #aacdf8; }
+  .pp-bar-team { font-size: 11px; font-weight: 600; color: var(--muted); }
+  .pp-bar-pct { font-size: 17px; font-weight: 700; line-height: 1; }
+  .pp-bar-pct.a { color: var(--accent-ink); }
+  .pp-bar-pct.b { color: var(--blue); }
+  .pp-bar {
+    --a: 65%;
+    height: 14px; border-radius: 999px;
+    background: linear-gradient(90deg,
+      var(--accent) 0 calc(var(--a) - 1.5px),
+      #fff calc(var(--a) - 1.5px) calc(var(--a) + 1.5px),
+      #aacdf8 calc(var(--a) + 1.5px) 100%);
+    box-shadow: inset 0 0 0 1px #1c271712;
+  }
+
+  /* 按队分两列 */
+  .pp-teams { display: grid; grid-template-columns: minmax(0, 1fr) 1px minmax(0, 1fr); gap: 10px; margin-top: 22px; }
+  .pp-divider { background: var(--line); }
+  .pp-team { min-width: 0; }
+  .pp-team-head { display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 700; letter-spacing: 1px; color: var(--muted); margin-bottom: 11px; }
+  .pp-team.b .pp-team-head { justify-content: flex-end; }
+
+  /* 每位球员一行:头像 + 名字居左(过长截断),赢/输两枚小 chip 居右 */
+  .pp-player { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .pp-player + .pp-player { margin-top: 12px; }
+  .predict .avatar.small { width: 24px; height: 24px; font-size: 9px; }
+  .pp-person { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1; }
+  .pp-name { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pp-chips { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
+  .pp-chip { display: inline-flex; align-items: baseline; gap: 3px; padding: 2px 6px 3px; border-radius: 5px; font-size: 10px; font-weight: 600; white-space: nowrap; }
+  .pp-chip .num { font-weight: 700; }
+  .pp-chip.win { background: var(--green-bg); color: var(--green); }
+  .pp-chip.loss { background: var(--red-bg); color: var(--red); }
+
+  /* 脚注 */
+  .pp-foot { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--line); text-align: center; font-size: 10px; color: var(--muted); }
+</style>
+</head>
+<body>
+  <div class="page">
+    <p class="muted" style="font-size:11px;">predict 结果面板 · 按 390px 手机宽度设计 · 上:中文名 / 下:罗马字长名(演示名字截断不撞右侧数字)</p>
+
+    <!-- 用例 A:中文名 -->
+    <div>
+      <div class="preview-label">用例 A · 中文名(陈静/周婷 vs 王磊/李强)</div>
+      <section class="predict panel">
+
+        <div class="pp-bar-head">
+          <div class="pp-bar-side">
+            <span class="pp-dot a"></span>
+            <span class="pp-bar-team">A 队</span>
+            <strong class="pp-bar-pct a num">65%</strong>
+          </div>
+          <div class="pp-bar-side">
+            <strong class="pp-bar-pct b num">35%</strong>
+            <span class="pp-bar-team">B 队</span>
+            <span class="pp-dot b"></span>
+          </div>
+        </div>
+        <div class="pp-bar"></div>
+
+        <div class="pp-teams">
+          <div class="pp-team">
+            <div class="pp-team-head"><span class="pp-dot a"></span>A 队</div>
+            <div class="pp-player">
+              <div class="pp-person">
+                <span class="avatar small">陈</span>
+                <span class="pp-name">陈静</span>
+              </div>
+              <div class="pp-chips">
+                <span class="pp-chip win">赢 <b class="num">+8</b></span>
+                <span class="pp-chip loss">输 <b class="num">−14</b></span>
+              </div>
+            </div>
+            <div class="pp-player">
+              <div class="pp-person">
+                <span class="avatar small">周</span>
+                <span class="pp-name">周婷</span>
+              </div>
+              <div class="pp-chips">
+                <span class="pp-chip win">赢 <b class="num">+9</b></span>
+                <span class="pp-chip loss">输 <b class="num">−13</b></span>
+              </div>
+            </div>
+          </div>
+          <div class="pp-divider"></div>
+          <div class="pp-team b">
+            <div class="pp-team-head">B 队<span class="pp-dot b"></span></div>
+            <div class="pp-player">
+              <div class="pp-person">
+                <span class="avatar small blue">王</span>
+                <span class="pp-name">王磊</span>
+              </div>
+              <div class="pp-chips">
+                <span class="pp-chip win">赢 <b class="num">+18</b></span>
+                <span class="pp-chip loss">输 <b class="num">−4</b></span>
+              </div>
+            </div>
+            <div class="pp-player">
+              <div class="pp-person">
+                <span class="avatar small blue">李</span>
+                <span class="pp-name">李强</span>
+              </div>
+              <div class="pp-chips">
+                <span class="pp-chip win">赢 <b class="num">+21</b></span>
+                <span class="pp-chip loss">输 <b class="num">−3</b></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <p class="pp-foot">数字为赢/输一场的 ELO 变化,基于当前 ELO,仅供参考</p>
+
+      </section>
+    </div>
+
+    <!-- 用例 B:罗马字长名 -->
+    <div>
+      <div class="preview-label">用例 B · 罗马字长名(taco knight / badminton boi vs clearchannel / roy)</div>
+      <section class="predict panel">
+
+        <div class="pp-bar-head">
+          <div class="pp-bar-side">
+            <span class="pp-dot a"></span>
+            <span class="pp-bar-team">A 队</span>
+            <strong class="pp-bar-pct a num">65%</strong>
+          </div>
+          <div class="pp-bar-side">
+            <strong class="pp-bar-pct b num">35%</strong>
+            <span class="pp-bar-team">B 队</span>
+            <span class="pp-dot b"></span>
+          </div>
+        </div>
+        <div class="pp-bar"></div>
+
+        <div class="pp-teams">
+          <div class="pp-team">
+            <div class="pp-team-head"><span class="pp-dot a"></span>A 队</div>
+            <div class="pp-player">
+              <div class="pp-person">
+                <span class="avatar small">t</span>
+                <span class="pp-name">taco knight</span>
+              </div>
+              <div class="pp-chips">
+                <span class="pp-chip win">赢 <b class="num">+8</b></span>
+                <span class="pp-chip loss">输 <b class="num">−14</b></span>
+              </div>
+            </div>
+            <div class="pp-player">
+              <div class="pp-person">
+                <span class="avatar small">b</span>
+                <span class="pp-name">badminton boi</span>
+              </div>
+              <div class="pp-chips">
+                <span class="pp-chip win">赢 <b class="num">+9</b></span>
+                <span class="pp-chip loss">输 <b class="num">−13</b></span>
+              </div>
+            </div>
+          </div>
+          <div class="pp-divider"></div>
+          <div class="pp-team b">
+            <div class="pp-team-head">B 队<span class="pp-dot b"></span></div>
+            <div class="pp-player">
+              <div class="pp-person">
+                <span class="avatar small blue">c</span>
+                <span class="pp-name">clearchannel</span>
+              </div>
+              <div class="pp-chips">
+                <span class="pp-chip win">赢 <b class="num">+19</b></span>
+                <span class="pp-chip loss">输 <b class="num">−4</b></span>
+              </div>
+            </div>
+            <div class="pp-player">
+              <div class="pp-person">
+                <span class="avatar small blue">r</span>
+                <span class="pp-name">roy</span>
+              </div>
+              <div class="pp-chips">
+                <span class="pp-chip win">赢 <b class="num">+21</b></span>
+                <span class="pp-chip loss">输 <b class="num">−3</b></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <p class="pp-foot">数字为赢/输一场的 ELO 变化,基于当前 ELO,仅供参考</p>
+
+      </section>
+    </div>
+
+  </div>
+</body>
+</html>
