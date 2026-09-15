@@ -34,6 +34,35 @@ function ratingOf(playerId: string, ratings: Record<string, number>): number {
   return ratings[playerId] ?? INITIAL_RATING;
 }
 
+/**
+ * 单场四位上场球员在胜/负两种赛果下的 ELO 变化预估值。
+ * 公式与 replayMatches 逐人口径一致:个人 ELO vs 对方队均分,K=K_DOUBLES,
+ * 不是 predictElo 的队均口径。返回原始浮点数,取整交给调用方。
+ */
+export function predictEloDeltas(
+  a1: string,
+  a2: string,
+  b1: string,
+  b2: string,
+  ratings: Record<string, number>
+): Record<string, { win: number; loss: number }> {
+  const teamAAvg = (ratingOf(a1, ratings) + ratingOf(a2, ratings)) / 2;
+  const teamBAvg = (ratingOf(b1, ratings) + ratingOf(b2, ratings)) / 2;
+
+  const out: Record<string, { win: number; loss: number }> = {};
+  for (const playerId of [a1, a2]) {
+    const expected =
+      1 / (1 + 10 ** ((teamBAvg - ratingOf(playerId, ratings)) / 400));
+    out[playerId] = { win: K_DOUBLES * (1 - expected), loss: -K_DOUBLES * expected };
+  }
+  for (const playerId of [b1, b2]) {
+    const expected =
+      1 / (1 + 10 ** ((teamAAvg - ratingOf(playerId, ratings)) / 400));
+    out[playerId] = { win: K_DOUBLES * (1 - expected), loss: -K_DOUBLES * expected };
+  }
+  return out;
+}
+
 function replayMatches(
   matches: Match[],
   visit?: (teamAWin: number, deltas: Record<string, number>) => void

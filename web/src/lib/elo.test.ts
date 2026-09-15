@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   recomputeElos,
   predictElo,
+  predictEloDeltas,
   computeMatchWinProbs,
   computeMatchEloDeltas,
   INITIAL_RATING,
@@ -66,6 +67,52 @@ describe("elo", () => {
         const m = matches[i];
         const expected = predictElo(m.a1, m.a2, m.b1, m.b2, ratings);
         expect(probs[i]).toBeCloseTo(expected.teamAWin, 10);
+      }
+    });
+  });
+
+  describe("predictEloDeltas", () => {
+    it("matches hand computation when all players are unknown", () => {
+      // 全员 1000:个人 expected=0.5 -> win=+8, loss=-8
+      const predicted = predictEloDeltas("1", "2", "3", "4", {});
+      for (const pid of ["1", "2", "3", "4"]) {
+        expect(predicted[pid].win).toBeCloseTo(8, 10);
+        expect(predicted[pid].loss).toBeCloseTo(-8, 10);
+      }
+    });
+
+    it("uses per-player rating vs opponent team average, not the team-average line", () => {
+      // 关键口径:个人 ELO vs 对方队均分。1 号 1200 分,与 2 号(1000)同队,
+      // 队均 1100;但 1 号的 expected 按自己与对方队均 1000 算,不按队均。
+      const ratings = { "1": 1200, "2": 1000, "3": 1000, "4": 1000 };
+      const predicted = predictEloDeltas("1", "2", "3", "4", ratings);
+      const expected1 = 1 / (1 + 10 ** ((1000 - 1200) / 400));
+      expect(predicted["1"].win).toBeCloseTo(16 * (1 - expected1), 10);
+      expect(predicted["1"].loss).toBeCloseTo(-16 * expected1, 10);
+      // 2 号个人分等于对方队均分 -> expected=0.5
+      expect(predicted["2"].win).toBeCloseTo(8, 10);
+      expect(predicted["2"].loss).toBeCloseTo(-8, 10);
+      // 3/4 号在 B 队,对方队均 1100
+      const expected3 = 1 / (1 + 10 ** ((1100 - 1000) / 400));
+      expect(predicted["3"].win).toBeCloseTo(16 * (1 - expected3), 10);
+      expect(predicted["3"].loss).toBeCloseTo(-16 * expected3, 10);
+    });
+
+    it("agrees with computeMatchEloDeltas on the replayed state before each match", () => {
+      const replayed = computeMatchEloDeltas(matches);
+      for (let i = 0; i < matches.length; i++) {
+        const { ratings } = recomputeElos(matches.slice(0, i));
+        const m = matches[i];
+        const predicted = predictEloDeltas(m.a1, m.a2, m.b1, m.b2, ratings);
+        const aWins = m.scoreA > m.scoreB;
+        for (const pid of [m.a1, m.a2]) {
+          const expected = aWins ? predicted[pid].win : predicted[pid].loss;
+          expect(replayed[i][pid]).toBeCloseTo(expected, 10);
+        }
+        for (const pid of [m.b1, m.b2]) {
+          const expected = aWins ? predicted[pid].loss : predicted[pid].win;
+          expect(replayed[i][pid]).toBeCloseTo(expected, 10);
+        }
       }
     });
   });
