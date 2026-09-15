@@ -1,5 +1,5 @@
 # 预测页展示 ELO 预测变化
-> 状态：进行中
+> 状态：已完成
 
 ## 目标
 
@@ -56,7 +56,7 @@
     等于 replayMatches 实放该场产生的 deltas
   - verify: `cd /Users/wennroy/proj/bedminton_elo/web && pnpm test -- src/lib/elo`
 
-- [ ] T3 predict-form.tsx 结果面板重写 [顺序]
+- [x] T3 predict-form.tsx 结果面板重写 [顺序]
   - 改动：`web/src/app/predict/predict-form.tsx`（改）
   - 要点：按 T1 确认稿实现结果面板；eloPrediction 旁调 predictEloDeltas，
     数字 Math.round；仍只在 ready（两队各 2 人）时显示；脚注文案保留
