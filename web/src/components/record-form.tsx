@@ -566,7 +566,14 @@ export function RecordForm({ players, initialSlots, matches }: RecordFormProps) 
           if (!open) setPickerSlot(null);
         }}
       >
-        <DialogContent className="sm:max-w-md">
+        <DialogContent
+          className="sm:max-w-md"
+          onOpenAutoFocus={(event) => {
+            // 先让球友点选名单，避免自动聚焦搜索框唤起手机键盘。
+            event.preventDefault();
+            (event.target as HTMLElement).focus();
+          }}
+        >
           <DialogHeader>
             <DialogTitle>
               {adding
@@ -626,7 +633,6 @@ export function RecordForm({ players, initialSlots, matches }: RecordFormProps) 
                   strokeWidth={1.65}
                 />
                 <input
-                  autoFocus
                   value={pickerSearch}
                   onChange={(e) => setPickerSearch(e.target.value)}
                   placeholder="搜索球员姓名"
