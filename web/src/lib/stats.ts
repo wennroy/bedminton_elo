@@ -86,6 +86,12 @@ export interface StatsData {
   tsPlayers: Record<string, TrueSkillPlayer>;
 }
 
+export interface LeaderboardSummary {
+  elo: number;
+  rank: number;
+  weekDelta: number;
+}
+
 function toEloMatch(m: MatchWithNames): EloMatch {
   return {
     date: m.playedAt,
@@ -115,6 +121,39 @@ export function buildStatsData(): StatsData {
   }));
 
   return { players, matches, ratings, eloHistory, tsPlayers: tsResult.players };
+}
+
+export function leaderboardSummaries(
+  data: StatsData,
+  weekStart: string
+): Record<number, LeaderboardSummary> {
+  const eloOf = (id: number) =>
+    Math.round(data.ratings.get(id)?.elo ?? INITIAL_RATING);
+  const rankOf = new Map(
+    [...data.players]
+      .sort((a, b) => eloOf(b.id) - eloOf(a.id))
+      .map((p, i) => [p.id, i + 1] as const)
+  );
+
+  const lastBeforeWeek = new Map<number, number>();
+  for (const h of data.eloHistory) {
+    if (h.date < weekStart) lastBeforeWeek.set(Number(h.playerId), h.elo);
+  }
+  const hasHistory = new Set(data.eloHistory.map((h) => Number(h.playerId)));
+
+  const summaries: Record<number, LeaderboardSummary> = {};
+  for (const p of data.players) {
+    const elo = eloOf(p.id);
+    summaries[p.id] = {
+      elo,
+      rank: rankOf.get(p.id) ?? 0,
+      weekDelta: hasHistory.has(p.id)
+        ? elo - (lastBeforeWeek.get(p.id) ?? INITIAL_RATING)
+        : 0,
+    };
+  }
+
+  return summaries;
 }
 
 export function headToHead(

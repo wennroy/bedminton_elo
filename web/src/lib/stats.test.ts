@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   headToHead,
+  leaderboardSummaries,
   playerFunStats,
   playerMatches,
   playerRelations,
@@ -73,6 +74,68 @@ const data: StatsData = {
   eloHistory: [],
   tsPlayers: {},
 };
+
+function leaderboardData(): StatsData {
+  return {
+    players: [
+      ...players,
+      { id: 5, name: "Eve", createdAt: "2024-01-01T00:00:00Z" },
+    ],
+    matches,
+    ratings: new Map([
+      [1, { elo: 1050.4, mu: 25, sigma: 8 }],
+      [2, { elo: 1050.4, mu: 25, sigma: 8 }],
+      [3, { elo: 1022.6, mu: 25, sigma: 8 }],
+    ]),
+    eloHistory: [
+      { date: "2024-01-07", playerId: "1", playerName: "Alice", elo: 1040 },
+      { date: "2024-01-09", playerId: "1", playerName: "Alice", elo: 1050 },
+      { date: "2024-01-09", playerId: "2", playerName: "Bob", elo: 1050 },
+      { date: "2024-01-01", playerId: "3", playerName: "Carol", elo: 1000 },
+      { date: "2024-01-09", playerId: "3", playerName: "Carol", elo: 1023 },
+    ],
+    tsPlayers: {},
+  };
+}
+
+describe("leaderboardSummaries", () => {
+  it("uses the initial rating and zero weekly delta for an unplayed player", () => {
+    const summaries = leaderboardSummaries(leaderboardData(), "2024-01-08");
+
+    expect(summaries[5]).toEqual({ elo: 1000, rank: 5, weekDelta: 0 });
+  });
+
+  it("measures a first match in the week from the initial rating", () => {
+    const summaries = leaderboardSummaries(leaderboardData(), "2024-01-08");
+
+    expect(summaries[2]).toEqual({ elo: 1050, rank: 2, weekDelta: 50 });
+  });
+
+  it("measures the weekly delta from the last snapshot before the week", () => {
+    const summaries = leaderboardSummaries(leaderboardData(), "2024-01-08");
+
+    expect(summaries[1]).toEqual({ elo: 1050, rank: 1, weekDelta: 10 });
+    expect(summaries[3].weekDelta).toBe(23);
+  });
+
+  it("assigns sequential ranks when rounded ELO scores are tied", () => {
+    const summaries = leaderboardSummaries(leaderboardData(), "2024-01-08");
+
+    expect(summaries[1].rank).toBe(1);
+    expect(summaries[2].rank).toBe(2);
+    expect(summaries[4].rank).toBe(4);
+    expect(summaries[5].rank).toBe(5);
+  });
+
+  it("does not mutate the supplied statistics data", () => {
+    const stats = leaderboardData();
+    const before = structuredClone(stats);
+
+    leaderboardSummaries(stats, "2024-01-08");
+
+    expect(stats).toEqual(before);
+  });
+});
 
 describe("stats", () => {
   it("computes head-to-head by opponent", () => {

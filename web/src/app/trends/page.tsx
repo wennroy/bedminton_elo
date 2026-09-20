@@ -1,12 +1,24 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { Leaderboard } from "@/components/leaderboard";
 import { HomeTrend } from "@/components/home-trend";
-import { buildStatsData } from "@/lib/stats";
+import { buildStatsData, leaderboardSummaries } from "@/lib/stats";
+import { getWeekRange } from "@/lib/weekly";
 
 export const dynamic = "force-dynamic";
 
+function getTodayString(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 export default async function TrendsPage() {
   const data = buildStatsData();
+  const { weekStart } = getWeekRange(getTodayString());
+  const summaries = leaderboardSummaries(data, weekStart);
 
   return (
     <div className="flex flex-col gap-6 max-[760px]:gap-5">
@@ -32,6 +44,17 @@ export default async function TrendsPage() {
       </div>
 
       <HomeTrend history={data.eloHistory} players={data.players} variant="full" />
+
+      <section className="rounded-2xl border border-border bg-card p-5 min-[761px]:p-[25px]">
+        <h2 className="mb-5 text-lg font-bold text-card-foreground">
+          当前球员排行榜
+        </h2>
+        <Leaderboard
+          players={data.players}
+          matches={data.matches}
+          summaries={summaries}
+        />
+      </section>
     </div>
   );
 }
