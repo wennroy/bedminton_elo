@@ -65,7 +65,7 @@
 
 ## Tasks
 
-- [x] T1 将排行榜从首页移至趋势大图下方 [顺序]
+- [ ] T1 将排行榜从首页移至趋势大图下方 [顺序]
   - 改动：`web/src/app/page.tsx`（改）、`web/src/app/trends/page.tsx`（改）、`web/src/lib/stats.ts`（改）、`web/src/lib/stats.test.ts`（改）。原则上不改 `Leaderboard` 的排序和展示逻辑。
   - 要点：把首页现有 `SummaryLite` 计算提取为 `leaderboardSummaries(data: StatsData, weekStart: string)`，返回按球员 ID 索引的 `{ elo, rank, weekDelta }`。两页共享此函数；当前 ELO 四舍五入、无记录初始分、本周一之前最后一个快照与并列排序都保留原口径。首页用同一份 `buildStatsData()` 结果生成个人概览，不因移除排行榜删除个人摘要所需的排名数据。
   - 要点：趋势页使用现有 `getWeekRange()` 和与首页一致的当地日期取得本周一，传入完整球员和比赛数据。首页移除排行榜区块及不再使用的链接／图标 import，最近比赛改为整行；趋势图本身的布局与交互保持不变。
@@ -110,6 +110,7 @@
 - 2026-09-20：执行分支 `feat/home-rankings-match-browser` 从计划基线提交 `1961b26` 创建；执行开始的代码基线为 `cb544d2`。使用 `corepack pnpm@11.10.0 install --frozen-lockfile` 安装依赖；`corepack pnpm@11.10.0 test` 通过（16 个测试文件、127 项测试）。直接运行 `pnpm` 被 Corepack 当前版本 11.15.1 与项目声明 11.10.0 的不匹配拦住，后续验证统一使用上述精确版本命令。
 - 2026-09-20：T1 已完成。`leaderboardSummaries` 抽出首页既有当前 ELO、顺序排名和本周涨跌计算；首页移除排行榜并让最近比赛占整行，`/trends` 在大图下展示复用的当前排行榜。`corepack pnpm@11.10.0 test -- src/lib/stats.test.ts` 通过（16 文件、132 测试），T1 文件 lint 通过，`git diff --check` 通过。需求符合性复审和代码质量复审均无 findings；人工走查仍待用户验收。
 - 2026-09-20：T2 已完成。新增不可变的 `filterMatches`，按球员姓名、球员 ID、有效日期范围取交集并按比赛日／录入时间／ID 逆序排列。复审发现混合有效和无效 `createdAt` 时比较器不稳定，以及 ISO 无效日历日期会被 JavaScript 规范化；均已先补失败回归测试后修复（有效时间优先、无效时间按 ID），两轮复审最终无 findings。`corepack pnpm@11.10.0 test -- src/lib/match-browser.test.ts` 通过（17 文件、154 测试），T2 文件 lint 通过；人工验收不适用。
+- 2026-09-20：T3 已实施，待人工验收。新增动态 `/matches` 与客户端比赛浏览器，含返回首页、姓名／球员／日期筛选、错误提示、20 条加载更多、A/B 中立比赛卡及球员档案链接；`AppShell` 增加页面标题。需求复审通过；代码质量复审提出返回入口、分页进度和长姓名窄屏溢出，均已修复并复核无 findings。任务测试（17 文件、155 测试）、T3 文件 lint、生产 build 均通过。另用临时 SQLite 的 126 场数据通过 Chrome 无头走查：默认、筛选、错误范围、清空、加载更多、320px 长姓名和初始搜索框不获焦；这不能替代真实手机的键盘验收。T1 同样已实施且自动验证／复审通过，保留未勾选以等待用户人工验收。
 - 2026-09-20：只完成代码勘察与 plan，阅读基准 `cb544d2`（v1.5.3）。业务实现、测试、构建均未在本次规划中执行。
 - 规划前工作区无已跟踪文件修改；已有未跟踪内容：`.playwright-mcp/`、`predict-scroll-bottom.png`、`predict-se-tap.png`、`web/scripts/seed-preview-extra.ts`。本次不改这些文件。
 - 开始实施时重新核对 HEAD、工作区和用户对推荐方案的答复；本条仅为勘察快照，不替代未来执行基线。

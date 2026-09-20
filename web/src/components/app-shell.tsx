@@ -55,6 +55,7 @@ const secondaryNav = [
 
 const pageTitles: [RegExp, string][] = [
   [/^\/$/, "俱乐部总览"],
+  [/^\/matches/, "所有比赛"],
   [/^\/players/, "球员分析"],
   [/^\/trends/, "全员趋势"],
   [/^\/signup/, "每周报名"],
