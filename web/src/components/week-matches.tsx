@@ -134,17 +134,26 @@ export function WeekMatches({ matches, weekStart }: WeekMatchesProps) {
 
   return (
     <div>
-      <div className="mb-5 flex items-center justify-between gap-3.5">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-x-3.5 gap-y-2">
         <h2 className="text-lg font-bold text-card-foreground">
           {hasIdentity ? "我的最近比赛" : "本周比赛"}
         </h2>
-        <Link
-          href={hasIdentity ? `/players/${myId}` : "/players"}
-          className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-win"
-        >
-          {hasIdentity ? "全部战绩" : "全部球员"}
-          <ArrowRight className="size-[15px]" strokeWidth={1.65} />
-        </Link>
+        <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
+          <Link
+            href={hasIdentity ? `/players/${myId}` : "/players"}
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-win"
+          >
+            {hasIdentity ? "全部战绩" : "全部球员"}
+            <ArrowRight className="size-[15px]" strokeWidth={1.65} />
+          </Link>
+          <Link
+            href="/matches"
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-win"
+          >
+            查看所有比赛
+            <ArrowRight className="size-[15px]" strokeWidth={1.65} />
+          </Link>
+        </div>
       </div>
 
       {hasIdentity ? (
