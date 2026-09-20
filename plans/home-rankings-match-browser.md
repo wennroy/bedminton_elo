@@ -73,7 +73,7 @@
   - verify: `pnpm -C web test -- src/lib/stats.test.ts && pnpm -C web lint src/app/page.tsx src/app/trends/page.tsx src/lib/stats.ts src/lib/stats.test.ts`
   - [人工] 首页 → 展开大图 → 切换排行榜 ELO／TrueSkill → 点球员档案；切换图表时间／成员不改变当前排行榜，首页个人摘要数值与改前一致。
 
-- [ ] T2 定义比赛筛选与排序纯函数 [顺序]
+- [x] T2 定义比赛筛选与排序纯函数 [顺序]
   - 改动：`web/src/lib/match-browser.ts`（新）、`web/src/lib/match-browser.test.ts`（新）。
   - 要点：用 `import type { MatchWithNames } from "@/lib/repo"` 共享数据类型，避免把 SQLite 运行时代码带入客户端。导出 `MatchFilters = { query: string; playerId: number | null; from: string; to: string }` 与 `filterMatches(matches: readonly MatchWithNames[], filters: MatchFilters): MatchWithNames[]`；不修改输入数组。空日期不限制，非法日期或反向范围返回空数组，由 UI 同时解释原因；日期字符串需为有效的 `YYYY-MM-DD`。
   - 要点：排序以日期、录入时间、ID 降序为准；兼容库内 SQLite 时间和 ISO 时间，解析失败时以 ID 保证确定性，不能把无效时间的 `NaN` 作为比较结果。筛选函数返回全部匹配结果，分页展示留在 UI 层。
@@ -109,6 +109,7 @@
 
 - 2026-09-20：执行分支 `feat/home-rankings-match-browser` 从计划基线提交 `1961b26` 创建；执行开始的代码基线为 `cb544d2`。使用 `corepack pnpm@11.10.0 install --frozen-lockfile` 安装依赖；`corepack pnpm@11.10.0 test` 通过（16 个测试文件、127 项测试）。直接运行 `pnpm` 被 Corepack 当前版本 11.15.1 与项目声明 11.10.0 的不匹配拦住，后续验证统一使用上述精确版本命令。
 - 2026-09-20：T1 已完成。`leaderboardSummaries` 抽出首页既有当前 ELO、顺序排名和本周涨跌计算；首页移除排行榜并让最近比赛占整行，`/trends` 在大图下展示复用的当前排行榜。`corepack pnpm@11.10.0 test -- src/lib/stats.test.ts` 通过（16 文件、132 测试），T1 文件 lint 通过，`git diff --check` 通过。需求符合性复审和代码质量复审均无 findings；人工走查仍待用户验收。
+- 2026-09-20：T2 已完成。新增不可变的 `filterMatches`，按球员姓名、球员 ID、有效日期范围取交集并按比赛日／录入时间／ID 逆序排列。复审发现混合有效和无效 `createdAt` 时比较器不稳定，以及 ISO 无效日历日期会被 JavaScript 规范化；均已先补失败回归测试后修复（有效时间优先、无效时间按 ID），两轮复审最终无 findings。`corepack pnpm@11.10.0 test -- src/lib/match-browser.test.ts` 通过（17 文件、154 测试），T2 文件 lint 通过；人工验收不适用。
 - 2026-09-20：只完成代码勘察与 plan，阅读基准 `cb544d2`（v1.5.3）。业务实现、测试、构建均未在本次规划中执行。
 - 规划前工作区无已跟踪文件修改；已有未跟踪内容：`.playwright-mcp/`、`predict-scroll-bottom.png`、`predict-se-tap.png`、`web/scripts/seed-preview-extra.ts`。本次不改这些文件。
 - 开始实施时重新核对 HEAD、工作区和用户对推荐方案的答复；本条仅为勘察快照，不替代未来执行基线。
