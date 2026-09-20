@@ -1,6 +1,6 @@
 # 首页排行榜迁移与所有比赛浏览
 
-> 状态：待评审（仅 plan，未实施）
+> 状态：进行中
 
 ## 目标
 
@@ -107,6 +107,7 @@
 
 ## 执行记录
 
+- 2026-09-20：执行分支 `feat/home-rankings-match-browser` 从计划基线提交 `1961b26` 创建；执行开始的代码基线为 `cb544d2`。使用 `corepack pnpm@11.10.0 install --frozen-lockfile` 安装依赖；`corepack pnpm@11.10.0 test` 通过（16 个测试文件、127 项测试）。直接运行 `pnpm` 被 Corepack 当前版本 11.15.1 与项目声明 11.10.0 的不匹配拦住，后续验证统一使用上述精确版本命令。
 - 2026-09-20：只完成代码勘察与 plan，阅读基准 `cb544d2`（v1.5.3）。业务实现、测试、构建均未在本次规划中执行。
 - 规划前工作区无已跟踪文件修改；已有未跟踪内容：`.playwright-mcp/`、`predict-scroll-bottom.png`、`predict-se-tap.png`、`web/scripts/seed-preview-extra.ts`。本次不改这些文件。
 - 开始实施时重新核对 HEAD、工作区和用户对推荐方案的答复；本条仅为勘察快照，不替代未来执行基线。
