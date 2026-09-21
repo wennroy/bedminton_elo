@@ -1,0 +1,20 @@
+{
+  "officialExample": {
+    "tau": 0.5,
+    "input": {
+      "rating": 1500,
+      "rd": 200,
+      "sigma": 0.06
+    },
+    "observations": [
+      { "rating": 1400, "rd": 30, "result": 1 },
+      { "rating": 1550, "rd": 100, "result": 0 },
+      { "rating": 1700, "rd": 300, "result": 0 }
+    ],
+    "expected": {
+      "rating": 1464.06,
+      "rd": 151.52,
+      "sigma": 0.05999
+    }
+  }
+}
