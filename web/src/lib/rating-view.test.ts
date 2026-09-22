@@ -18,6 +18,17 @@ import { readRatingConfig } from "@/lib/rating-config";
 import { buildStatsData, loadLegacyStatsView } from "@/lib/stats";
 import * as replayModule from "@/lib/ratings/replay";
 import { ratingConfigVersion } from "@/lib/ratings/config";
+import {
+  applyRatingParam,
+  isRatingModelParam,
+} from "@/components/rating-mode-control";
+import {
+  formatStatusInstant,
+  RATING_STATUS_EXPLAINERS,
+  ratingStatusBanner,
+  toRatingStatusInput,
+} from "@/components/rating-status";
+import { boundaryRefreshDelayMs } from "@/lib/use-rating-boundary-refresh";
 
 const FIRST_SEASON_START = "2026-07-01";
 const AS_OF_WEEK = "2026-10-06T20:00:00+08:00"; // 2026-10-05 起的一周
@@ -174,6 +185,39 @@ describe("loadRatingView glicko2 分支", () => {
     const failed = loadRatingView({ rating: "glicko2", asOf: AS_OF_WEEK });
     expect(failed.freshness).toBe("unavailable");
   });
+
+  it("跨周界不需要 DB 写入：asOf 越过 nextBoundary 后同一批人由 Estimated 变 Final", () => {
+    initializeRatingConfig({ firstSeasonStart: FIRST_SEASON_START }, getDb());
+    setActiveModel("glicko2", getDb());
+    seedMatch("2026-10-05");
+
+    const before = loadRatingView({ rating: "glicko2", asOf: AS_OF_WEEK });
+    if (before.model !== "glicko2" || before.freshness !== "fresh") {
+      throw new Error("expected glicko2 fresh");
+    }
+    expect(before.view.players.map((p) => p.status)).toEqual([
+      "estimated",
+      "estimated",
+      "estimated",
+      "estimated",
+    ]);
+    const boundary = Date.parse(before.nextBoundary);
+
+    // 同一数据库、无新写入，仅把评分时点推过周界（读取时按 asOf 重新结算）。
+    const after = loadRatingView({
+      rating: "glicko2",
+      asOf: new Date(boundary + 60_000).toISOString(),
+    });
+    if (after.model !== "glicko2" || after.freshness !== "fresh") {
+      throw new Error("expected glicko2 fresh");
+    }
+    expect(after.currentSegmentId).not.toBe(before.currentSegmentId);
+    expect(Date.parse(after.nextBoundary)).toBeGreaterThan(boundary);
+    for (const player of after.view.players) {
+      expect(player.status).toBe("final");
+      expect(player.lastFinal).not.toBeNull();
+    }
+  });
 });
 
 describe("loadPredictionView", () => {
@@ -329,5 +373,148 @@ describe("loadPredictionView", () => {
     if (stale.freshness === "stale") {
       expect(stale.lastGoodAsOf).toBe(AS_OF_WEEK);
     }
+  });
+});
+
+describe("rating-status 状态映射", () => {
+  it("legacy 结果不显示新版状态", () => {
+    const result = loadRatingView({ rating: "legacy", asOf: AS_OF_WEEK });
+    expect(toRatingStatusInput(result)).toEqual({ model: "legacy" });
+    expect(ratingStatusBanner(toRatingStatusInput(result))).toBeNull();
+  });
+
+  it("fresh：正常状态显示模型版本与更新时点", () => {
+    initializeRatingConfig({ firstSeasonStart: FIRST_SEASON_START }, getDb());
+    setActiveModel("glicko2", getDb());
+    seedMatch("2026-10-05");
+    const result = loadRatingView({ rating: "glicko2", asOf: AS_OF_WEEK });
+    const banner = ratingStatusBanner(toRatingStatusInput(result));
+    if (banner === null) throw new Error("expected banner");
+    expect(banner.tone).toBe("ok");
+    expect(banner.title).toBe("新版评分运行中");
+    expect(banner.meta).toContain(`更新于 ${formatStatusInstant(AS_OF_WEEK)}`);
+    expect(banner.detail).toBeNull();
+    expect(banner.showLegend).toBe(true);
+  });
+
+  it("stale：显示最后成功时点，不冒充当前时刻", () => {
+    initializeRatingConfig({ firstSeasonStart: FIRST_SEASON_START }, getDb());
+    setActiveModel("glicko2", getDb());
+    seedMatch("2026-10-05");
+    const first = loadRatingView({ rating: "glicko2", asOf: AS_OF_WEEK });
+    expect(first.freshness).toBe("fresh");
+
+    // 改变输入 + 注入计算失败；第二次读取使用更晚的 asOf。
+    getDb().prepare(`UPDATE matches SET score_a = 5 WHERE id = 1`).run();
+    replaySpy.mockImplementation(() => {
+      throw new RangeError("numeric failure");
+    });
+    const laterAsOf = "2026-10-07T20:00:00+08:00";
+    const stale = loadRatingView({ rating: "glicko2", asOf: laterAsOf });
+    expect(stale.freshness).toBe("stale");
+    // asOf 如实为最后成功时点，而非第二次请求的时点。
+    expect(stale.asOf).toBe(AS_OF_WEEK);
+
+    const banner = ratingStatusBanner(toRatingStatusInput(stale));
+    if (banner === null) throw new Error("expected banner");
+    expect(banner.tone).toBe("warn");
+    expect(banner.title).toBe("新版评分暂未更新");
+    expect(banner.detail).toContain(
+      formatStatusInstant(AS_OF_WEEK)
+    );
+    expect(banner.detail).toContain("最后成功");
+    expect(banner.meta).toContain("最后成功");
+    expect(banner.showLegend).toBe(true);
+  });
+
+  it("unavailable（配置未初始化）：显示原因，不附状态说明", () => {
+    const result = loadRatingView({ rating: "glicko2", asOf: AS_OF_WEEK });
+    expect(result.freshness).toBe("unavailable");
+    const banner = ratingStatusBanner(toRatingStatusInput(result));
+    if (banner === null) throw new Error("expected banner");
+    expect(banner.tone).toBe("error");
+    expect(banner.title).toBe("新版评分暂不可用");
+    expect(banner.detail).toContain("rating config not initialized");
+    expect(banner.meta).toBeNull();
+    expect(banner.showLegend).toBe(false);
+  });
+
+  it("Estimated/Final/未评级 说明各不相同且覆盖三种状态", () => {
+    expect(RATING_STATUS_EXPLAINERS.map((e) => e.status)).toEqual([
+      "estimated",
+      "final",
+      "unrated",
+    ]);
+    const descriptions = new Set(
+      RATING_STATUS_EXPLAINERS.map((e) => e.description)
+    );
+    expect(descriptions.size).toBe(3);
+  });
+
+  it("formatStatusInstant 输出本地「M月D日 HH:MM」", () => {
+    const iso = "2026-10-06T12:34:56Z";
+    const d = new Date(iso);
+    const expected = `${d.getMonth() + 1}月${d.getDate()}日 ${String(
+      d.getHours()
+    ).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    expect(formatStatusInstant(iso)).toBe(expected);
+    expect(formatStatusInstant(iso)).toMatch(/^\d{1,2}月\d{1,2}日 \d{2}:\d{2}$/);
+  });
+});
+
+describe("rating-mode-control 查询参数", () => {
+  it("isRatingModelParam 只接受 glicko2/legacy，其余非法", () => {
+    expect(isRatingModelParam("glicko2")).toBe(true);
+    expect(isRatingModelParam("legacy")).toBe(true);
+    for (const bad of ["Glicko2", "glicko", "bogus", "", null, undefined, 2]) {
+      expect(isRatingModelParam(bad)).toBe(false);
+    }
+  });
+
+  it("applyRatingParam 保留 week/pa1..pb2 等其他查询参数", () => {
+    // weekly 的 week 与 predict 的预填阵容都保留，rating 追加在末尾。
+    expect(
+      applyRatingParam("week=2026-10-05&pa1=1&pa2=2&pb1=3&pb2=4", "glicko2")
+    ).toBe("week=2026-10-05&pa1=1&pa2=2&pb1=3&pb2=4&rating=glicko2");
+    // 已带 rating 时覆盖原值而不是追加。
+    expect(applyRatingParam("rating=glicko2&week=2026-10-05", "legacy")).toBe(
+      "rating=legacy&week=2026-10-05"
+    );
+    // 无其他参数时只保留 rating。
+    expect(applyRatingParam("", "glicko2")).toBe("rating=glicko2");
+  });
+});
+
+describe("use-rating-boundary-refresh 边界计算", () => {
+  const NOW = Date.parse("2026-10-06T12:00:00Z");
+
+  it("nextBoundary 为 null（legacy/unavailable）或非法 ISO 时不设定时", () => {
+    expect(boundaryRefreshDelayMs(null, NOW)).toBeNull();
+    expect(boundaryRefreshDelayMs("not-a-date", NOW)).toBeNull();
+  });
+
+  it("未到边界返回剩余毫秒；已到/已过边界回 0", () => {
+    expect(boundaryRefreshDelayMs("2026-10-11T16:00:00Z", NOW)).toBe(
+      Date.parse("2026-10-11T16:00:00Z") - NOW // 5 天 4 小时
+    );
+    expect(boundaryRefreshDelayMs("2026-10-06T12:00:00Z", NOW)).toBe(0);
+    expect(boundaryRefreshDelayMs("2026-10-01T12:00:00Z", NOW)).toBe(0);
+  });
+
+  it("glicko2 fresh 结果的 nextBoundary 为 ISO 可定时；legacy 为 null", () => {
+    initializeRatingConfig({ firstSeasonStart: FIRST_SEASON_START }, getDb());
+    setActiveModel("glicko2", getDb());
+    seedMatch("2026-10-05");
+
+    const fresh = loadRatingView({ rating: "glicko2", asOf: AS_OF_WEEK });
+    if (fresh.model !== "glicko2") throw new Error("expected glicko2");
+    expect(typeof fresh.nextBoundary).toBe("string");
+    const delay = boundaryRefreshDelayMs(fresh.nextBoundary, NOW);
+    expect(delay).not.toBeNull();
+    expect(delay).toBeGreaterThan(0);
+
+    const legacy = loadRatingView({ rating: "legacy", asOf: AS_OF_WEEK });
+    expect(legacy.nextBoundary).toBeNull();
+    expect(boundaryRefreshDelayMs(legacy.nextBoundary, NOW)).toBeNull();
   });
 });
