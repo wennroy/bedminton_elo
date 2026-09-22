@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { Button } from "@/components/ui/button";
 import { getMyPlayerId } from "@/lib/identity";
@@ -11,6 +12,7 @@ import {
   saveSchedule,
   type ScheduleResult,
 } from "@/lib/schedule-storage";
+import { formatStatusInstant } from "@/components/rating-status";
 import { ChevronDown, ChevronRight, ChevronUp, RotateCcw, Sparkles } from "lucide-react";
 
 interface Player {
@@ -23,6 +25,14 @@ interface ScheduleFormProps {
 }
 
 export function ScheduleForm({ players }: ScheduleFormProps) {
+  const searchParams = useSearchParams();
+  // rating 查询参数透传：显式 glicko2/legacy 时请求与链接跟随该模式；
+  // 缺省由服务端回 activeModel。
+  const ratingParam = searchParams.get("rating");
+  const ratingQuery =
+    ratingParam === "glicko2" || ratingParam === "legacy"
+      ? `?rating=${ratingParam}`
+      : "";
   const [selected, setSelected] = React.useState<Set<number>>(new Set());
   const [matches, setMatches] = React.useState(4);
   const [advancedOpen, setAdvancedOpen] = React.useState(false);
@@ -31,6 +41,13 @@ export function ScheduleForm({ players }: ScheduleFormProps) {
   const [loading, setLoading] = React.useState(false);
   const [result, setResult] = React.useState<ScheduleResult | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  /** glicko2 评分不可用（409）时禁用依赖新评分的生成/预测，不冒充 Legacy。 */
+  const [glickoDown, setGlickoDown] = React.useState<string | null>(null);
+
+  // 模式切换后允许重试（如切到 Legacy 不再依赖新版评分）。
+  React.useEffect(() => {
+    setGlickoDown(null);
+  }, [ratingQuery]);
 
   // 按当前身份恢复上次生成的配对(只有「清空」或再次「生成配对」才刷新)
   React.useEffect(() => {
@@ -43,7 +60,7 @@ export function ScheduleForm({ players }: ScheduleFormProps) {
     setResult(stored.result);
   }, []);
 
-  const canGenerate = selected.size >= 4 && matches >= 1;
+  const canGenerate = selected.size >= 4 && matches >= 1 && glickoDown === null;
 
   function toggle(id: number) {
     setSelected((prev) => {
@@ -75,11 +92,24 @@ export function ScheduleForm({ players }: ScheduleFormProps) {
           matches,
           seed,
           lambda,
+          ...(ratingParam === "glicko2" || ratingParam === "legacy"
+            ? { rating: ratingParam }
+            : {}),
         }),
       });
       const data = await response.json();
       if (!response.ok) {
-        setError(data.error || "生成失败");
+        if (response.status === 409 && data?.state) {
+          // glicko2 不可用：禁用依赖新评分的生成/预测，不自动冒充 Legacy。
+          setGlickoDown(
+            typeof data.reason === "string" ? data.reason : "rating unavailable"
+          );
+        }
+        setError(
+          data?.reason
+            ? `${data.error ?? "生成失败"}：${data.reason}`
+            : data?.error || "生成失败"
+        );
         return;
       }
       setResult(data);
@@ -225,6 +255,13 @@ export function ScheduleForm({ players }: ScheduleFormProps) {
         </div>
       )}
 
+      {glickoDown && (
+        <div className="rounded-xl border border-dashed border-loss/50 bg-loss-bg p-3 text-center text-xs leading-relaxed text-loss">
+          新版评分暂不可用，已暂停依赖新评分的生成与预测：
+          {glickoDown}。切换到 Legacy 模式可继续生成。
+        </div>
+      )}
+
       <Button
         size="lg"
         disabled={!canGenerate || loading}
@@ -235,12 +272,57 @@ export function ScheduleForm({ players }: ScheduleFormProps) {
         {!loading && <Sparkles className="ml-2 size-4" />}
       </Button>
 
-      {result && <ScheduleResultView result={result} />}
+      {result && (
+        <ScheduleResultView
+          result={result}
+          ratingQuery={ratingQuery}
+          glickoDown={glickoDown !== null}
+        />
+      )}
     </div>
   );
 }
 
-function ScheduleResultView({ result }: { result: ScheduleResult }) {
+/** 响应/快照的模型元信息行：glicko2 显示版本与时点，旧记录标「旧快照」。 */
+function ScheduleMetaLine({ result }: { result: ScheduleResult }) {
+  if (result.model === "glicko2") {
+    return (
+      <p className="text-[10px] text-muted-foreground">
+        新版评分 · 模型 {result.configVersion ?? "?"}
+        {result.asOf ? ` · 评分时点 ${formatStatusInstant(result.asOf)}` : ""}
+      </p>
+    );
+  }
+  if (result.model === "legacy") {
+    return (
+      <p className="text-[10px] text-muted-foreground">Legacy ELO 评分</p>
+    );
+  }
+  return (
+    <p className="text-[10px] text-muted-foreground">
+      旧快照 · 仅保留当时的概率，点「生成配对」重新生成后可刷新评分
+    </p>
+  );
+}
+
+function ScheduleResultView({
+  result,
+  ratingQuery,
+  glickoDown,
+}: {
+  result: ScheduleResult;
+  /** 当前 rating 模式查询串（如 "?rating=glicko2"），predict 链接透传。 */
+  ratingQuery: string;
+  /** glicko2 不可用时预测链接不可用（不冒充 Legacy 数字）。 */
+  glickoDown: boolean;
+}) {
+  // 快照本身的模型决定 predict 链接的模式：旧快照不带参数，跟随当前默认。
+  const resultRatingQuery =
+    result.model === "glicko2"
+      ? "?rating=glicko2"
+      : result.model === "legacy"
+        ? "?rating=legacy"
+        : ratingQuery;
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-baseline justify-between">
@@ -249,6 +331,7 @@ function ScheduleResultView({ result }: { result: ScheduleResult }) {
           点击场次卡片直接记分
         </span>
       </div>
+      <ScheduleMetaLine result={result} />
       <div className="space-y-3">
         {result.schedule.map((match, index) => (
           <div
@@ -257,13 +340,22 @@ function ScheduleResultView({ result }: { result: ScheduleResult }) {
           >
             <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
               <span>第 {index + 1} 场</span>
-              <Link
-                href={`/predict?pa1=${match.a1}&pa2=${match.a2}&pb1=${match.b1}&pb2=${match.b2}`}
-                className="flex items-center gap-1 rounded-md px-1 py-0.5 transition-colors hover:text-primary"
-              >
-                A 队胜率 {Math.round(match.winRate * 100)}%
-                <ChevronRight className="size-3" />
-              </Link>
+              {glickoDown ? (
+                <span
+                  className="flex items-center gap-1 rounded-md px-1 py-0.5 text-loss"
+                  title="新版评分暂不可用，恢复后可查看预测"
+                >
+                  A 队胜率 {Math.round(match.winRate * 100)}%
+                </span>
+              ) : (
+                <Link
+                  href={`/predict?pa1=${match.a1}&pa2=${match.a2}&pb1=${match.b1}&pb2=${match.b2}${resultRatingQuery ? `&${resultRatingQuery.slice(1)}` : ""}`}
+                  className="flex items-center gap-1 rounded-md px-1 py-0.5 transition-colors hover:text-primary"
+                >
+                  A 队胜率 {Math.round(match.winRate * 100)}%
+                  <ChevronRight className="size-3" />
+                </Link>
+              )}
             </div>
             <Link
               href={`/record?pa1=${match.a1}&pa2=${match.a2}&pb1=${match.b1}&pb2=${match.b2}`}

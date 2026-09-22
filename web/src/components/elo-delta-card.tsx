@@ -14,12 +14,22 @@ export interface EloDeltaPlayer {
 
 interface EloDeltaCardProps {
   players: EloDeltaPlayer[];
+  /**
+   * 卡片上方的小标注（如「Legacy ELO 参考」）：新版评分启用后，
+   * 旧 before/after 卡只作 Legacy 分支展示，由调用方标注语义。
+   */
+  caption?: string;
 }
 
 /** 成功弹层里的四人前后积分与变化列表（mock delta-list） */
-export function EloDeltaCard({ players }: EloDeltaCardProps) {
+export function EloDeltaCard({ players, caption }: EloDeltaCardProps) {
   return (
     <div>
+      {caption ? (
+        <div className="mb-1 text-[10px] font-semibold tracking-[1px] text-muted-foreground">
+          {caption}
+        </div>
+      ) : null}
       {players.map((player) => {
         const before = Math.round(player.before);
         const after = Math.round(player.after);
