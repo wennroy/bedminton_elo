@@ -136,7 +136,7 @@ describe("rating-config CLI", () => {
     const activated = run(["activate", "--db", dbPath, "--model", "glicko2"], io());
     expect(activated.exitCode).toBe(0);
     expect(output()).toContain("glicko2");
-    const status = run(["status", "--db", dbPath], io());
+    run(["status", "--db", dbPath], io());
     expect(output()).toContain("activeModel: glicko2");
   });
 
@@ -164,7 +164,7 @@ describe("rating-config CLI", () => {
     expect(output()).toContain("tau: 0.3 -> 0.4");
     expect(metaCount()).toBe(before);
     // dry-run 之后真实配置仍是 p1
-    const status = run(["status", "--db", dbPath], io());
+    run(["status", "--db", dbPath], io());
     expect(output()).toContain("paramsVersion: p1");
   });
 
@@ -173,7 +173,7 @@ describe("rating-config CLI", () => {
     const result = run(["activate", "--db", dbPath, "--model", "glicko2", "--dry-run"], io());
     expect(result.exitCode).toBe(0);
     expect(output()).toContain("activeModel: legacy -> glicko2");
-    const status = run(["status", "--db", dbPath], io());
+    run(["status", "--db", dbPath], io());
     expect(output()).toContain("activeModel: legacy");
   });
 
