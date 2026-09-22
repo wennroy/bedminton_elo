@@ -12,7 +12,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { FunMatch, WeeklyStats } from "@/lib/weekly";
+import type {
+  FunMatch,
+  WeeklyRatingReport,
+  WeeklyStats,
+} from "@/lib/weekly";
 import {
   Download,
   Flame,
@@ -65,7 +69,11 @@ export function WeeklyView({ stats, weekStarts }: WeeklyViewProps) {
       // 完整 URL 作 key 存了旧图且永不回源;v=2 的存量条目又碰上「ETag 只
       // 指纹数据」的 304 陷阱(数据没变 → 回旧设计图)。换 URL key 规避存量
       // 条目,此后新鲜度由服务端 ETag 协商保证(no-cache + 数据&设计双指纹)。
-      const res = await fetch(`/api/og/weekly?week=${stats.weekStart}&v=3`);
+      // glicko2 模式透传 rating：图片与网页消费同一 ratingReport。
+      const ratingQuery = stats.ratingReport ? "&rating=glicko2" : "";
+      const res = await fetch(
+        `/api/og/weekly?week=${stats.weekStart}&v=3${ratingQuery}`
+      );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
       stopProgressTimer();
@@ -159,33 +167,37 @@ export function WeeklyView({ stats, weekStarts }: WeeklyViewProps) {
         )}
       </section>
 
-      <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-bold text-foreground">ELO 涨跌榜</h2>
-        {stats.eloChanges.length === 0 ? (
-          <Empty />
-        ) : (
-          <div className="space-y-2">
-            {stats.eloChanges.slice(0, 5).map((s, i) => (
-              <RankRow
-                key={s.playerId}
-                rank={i + 1}
-                name={s.name}
-                value={
-                  <span className={s.change >= 0 ? "text-win" : "text-loss"}>
-                    {s.change >= 0 ? "+" : ""}
-                    {s.change}
-                    {s.change >= 0 ? (
-                      <TrendingUp className="ml-1 inline size-4" />
-                    ) : (
-                      <TrendingDown className="ml-1 inline size-4" />
-                    )}
-                  </span>
-                }
-              />
-            ))}
-          </div>
-        )}
-      </section>
+      {stats.ratingReport ? (
+        <RatingReportSection report={stats.ratingReport} />
+      ) : (
+        <section className="flex flex-col gap-3">
+          <h2 className="text-lg font-bold text-foreground">ELO 涨跌榜</h2>
+          {stats.eloChanges.length === 0 ? (
+            <Empty />
+          ) : (
+            <div className="space-y-2">
+              {stats.eloChanges.slice(0, 5).map((s, i) => (
+                <RankRow
+                  key={s.playerId}
+                  rank={i + 1}
+                  name={s.name}
+                  value={
+                    <span className={s.change >= 0 ? "text-win" : "text-loss"}>
+                      {s.change >= 0 ? "+" : ""}
+                      {s.change}
+                      {s.change >= 0 ? (
+                        <TrendingUp className="ml-1 inline size-4" />
+                      ) : (
+                        <TrendingDown className="ml-1 inline size-4" />
+                      )}
+                    </span>
+                  }
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       <section className="flex flex-col gap-3">
         <h2 className="text-lg font-bold text-foreground">最佳组合</h2>
@@ -339,6 +351,129 @@ function RankRow({
         {value}
       </span>
     </div>
+  );
+}
+
+/**
+ * glicko2 评分变化：消费 stats.ratingReport（段级 estimated/final、校准与
+ * 重置），跨季周分段列出；eloChanges 保持旧 ELO 语义，仅 Legacy 分支消费。
+ * 当前周校准尚未发生时（estimated 段）不显示为 0 的「正式校准」。
+ */
+function RatingReportSection({ report }: { report: WeeklyRatingReport }) {
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-lg font-bold text-foreground">评分变化</h2>
+        <span className="text-[10px] text-muted-foreground">
+          新版 Glicko-2 · 模型 {report.version}
+          {report.freshness === "stale"
+            ? " · 以上为最后成功结算的结果，恢复后自动更新"
+            : ""}
+        </span>
+      </div>
+      {report.segments.map((segment) => {
+        const players = [...segment.players].sort(
+          (a, b) =>
+            b.estimatedChange - a.estimatedChange || a.playerId - b.playerId
+        );
+        return (
+          <div
+            key={segment.segmentId}
+            className="rounded-2xl border border-border bg-card p-4 shadow-sm"
+          >
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-card-foreground">
+                赛季 {segment.seasonId ?? "—"} ·{" "}
+                {segment.weekStart.slice(5).replace("-", ".")} 起
+              </span>
+              {segment.status === "final" ? (
+                <span className="rounded-[5px] bg-win-bg px-1.5 py-0.5 text-[10px] font-bold text-win">
+                  正式 Final
+                </span>
+              ) : (
+                <span className="rounded-[5px] border border-dashed border-border px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground">
+                  预估 Estimated
+                </span>
+              )}
+            </div>
+            {players.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                本周暂无评分变化
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {players.map((p, i) => (
+                  <RankRow
+                    key={p.playerId}
+                    rank={i + 1}
+                    name={p.name}
+                    value={
+                      <span className="flex flex-wrap items-center justify-end gap-x-2 gap-y-0.5">
+                        <span
+                          className={
+                            p.estimatedChange >= 0 ? "text-win" : "text-loss"
+                          }
+                        >
+                          预估 {p.estimatedChange >= 0 ? "+" : ""}
+                          {p.estimatedChange}
+                        </span>
+                        {p.finalR !== null ? (
+                          <>
+                            {p.correction !== 0 ? (
+                              <span className="text-muted-foreground">
+                                校准 {p.correction >= 0 ? "+" : ""}
+                                {p.correction}
+                              </span>
+                            ) : null}
+                            <span className="font-bold">Final {p.finalR}</span>
+                          </>
+                        ) : null}
+                      </span>
+                    }
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+      {report.resets.length > 0 && (
+        <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-4">
+          <h3 className="mb-2 text-xs font-semibold text-card-foreground">
+            赛季重置
+          </h3>
+          <div className="space-y-1.5">
+            {report.resets.map((reset) => (
+              <div key={reset.segmentId} className="space-y-1.5">
+                <div className="text-[10px] text-muted-foreground">
+                  赛季 {reset.seasonId} 开始 ·{" "}
+                  {reset.at.slice(0, 10).slice(5).replace("-", ".")}
+                </div>
+                {reset.changes.map((change) => (
+                  <div
+                    key={change.playerId}
+                    className="flex items-center justify-between gap-2 text-xs"
+                  >
+                    <span className="min-w-0 truncate font-medium text-card-foreground">
+                      {change.name}
+                    </span>
+                    <span className="shrink-0 font-num text-muted-foreground">
+                      {change.beforeR} → {change.afterR}
+                    </span>
+                    <span
+                      className={`shrink-0 font-num font-bold ${change.delta >= 0 ? "text-win" : "text-loss"}`}
+                    >
+                      {change.delta >= 0 ? "+" : ""}
+                      {change.delta}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 

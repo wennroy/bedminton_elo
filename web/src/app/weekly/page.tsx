@@ -1,11 +1,18 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
-import { buildWeeklyStats, listWeekStarts, getWeekRange } from "@/lib/weekly";
+import {
+  buildWeeklyStats,
+  listWeekStarts,
+  getWeekRange,
+  WeeklyRatingUnavailableError,
+} from "@/lib/weekly";
+import { RatingModeControl } from "@/components/rating-mode-control";
 import { WeeklyView } from "./weekly-view";
 
 export const dynamic = "force-dynamic";
 
 interface WeeklyPageProps {
-  searchParams: Promise<{ week?: string }>;
+  searchParams: Promise<{ week?: string; rating?: string }>;
 }
 
 export default async function WeeklyPage({ searchParams }: WeeklyPageProps) {
@@ -32,10 +39,40 @@ export default async function WeeklyPage({ searchParams }: WeeklyPageProps) {
     notFound();
   }
 
-  const stats = buildWeeklyStats(weekStart);
+  // 按 searchParams.rating 透传：显式 glicko2/legacy 优先，非法/缺省回 activeModel。
+  const ratingParam = params.rating;
+  const rating = typeof ratingParam === "string" ? ratingParam : undefined;
+
+  let stats;
+  try {
+    stats = buildWeeklyStats(weekStart, { rating });
+  } catch (error) {
+    if (error instanceof WeeklyRatingUnavailableError) {
+      // glicko2 不可用：如实拒答展示，不伪造胜率、不静默退回 legacy 数据。
+      return (
+        <div>
+          <h1 className="mb-4 text-xl font-bold text-foreground">周报</h1>
+          <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-loss/50 bg-loss-bg p-6 text-center">
+            <p className="text-sm text-loss">新版评分暂不可用：{error.reason}</p>
+            <Link
+              href={`/weekly?week=${weekStart}&rating=legacy`}
+              className="text-xs text-muted-foreground underline underline-offset-2 transition-colors hover:text-foreground"
+            >
+              查看 Legacy ELO 周报
+            </Link>
+          </div>
+        </div>
+      );
+    }
+    throw error;
+  }
 
   return (
     <div>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-xl font-bold text-foreground">周报</h1>
+        <RatingModeControl current={stats.ratingReport ? "glicko2" : "legacy"} />
+      </div>
       <WeeklyView stats={stats} weekStarts={weekStarts} />
     </div>
   );
