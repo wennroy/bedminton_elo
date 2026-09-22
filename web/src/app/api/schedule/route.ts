@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { readRatingConfig } from "@/lib/rating-config";
-import { loadGlickoSnapshot } from "@/lib/rating-service";
+import { loadGlickoSnapshot, type RatingServiceResult } from "@/lib/rating-service";
 import { predictDoubles } from "@/lib/ratings/doubles";
 import type { RatingModel } from "@/lib/ratings/types";
 import { listPlayers, recomputeAllRatings } from "@/lib/repo";
@@ -103,7 +103,22 @@ export async function POST(request: Request) {
   if (model === "glicko2") {
     const conn = getDb();
     const asOf = new Date().toISOString();
-    const snapshot = loadGlickoSnapshot(conn, asOf);
+    // DB 层异常（连接/读取失败）也塑造成结构化 409，不外泄未成形 500。
+    let snapshot: RatingServiceResult;
+    try {
+      snapshot = loadGlickoSnapshot(conn, asOf);
+    } catch (error) {
+      return NextResponse.json(
+        {
+          error: "glicko2 rating service unavailable",
+          state: "unavailable",
+          reason: `rating service failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        },
+        { status: 409 }
+      );
+    }
     if (snapshot.state !== "ready") {
       const detail =
         snapshot.state === "stale"

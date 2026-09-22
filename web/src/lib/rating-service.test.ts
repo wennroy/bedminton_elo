@@ -258,7 +258,7 @@ describe("失败快照判别表", () => {
     });
   });
 
-  it("同输入曾成功、本次重算失败（asOf 跨段）→ 直接复用旧成功结果 ready", () => {
+  it("同输入曾成功、本次重算失败（asOf 跨段）→ stale，不把旧快照冒充当前", () => {
     seedWeekMatches("2026-10-05");
     const first = loadGlickoSnapshot(db, AS_OF_WEEK_1);
     expect(first.state).toBe("ready");
@@ -266,11 +266,12 @@ describe("失败快照判别表", () => {
       throw new RangeError("numeric failure");
     });
     const result = loadGlickoSnapshot(db, AS_OF_WEEK_2);
-    // inputHash 与缓存一致（同输入曾成功），允许直接复用
-    expect(result.state).toBe("ready");
-    if (result.state === "ready" && first.state === "ready") {
-      expect(result.replay).toEqual(first.replay);
-      expect(result.replay.asOf).toBe(AS_OF_WEEK_1); // 如实反映旧时点
+    // inputHash 虽与缓存一致，但 asOf 已跨段：跨段触发新结算，旧快照过期
+    expect(result.state).toBe("stale");
+    if (result.state === "stale" && first.state === "ready") {
+      expect(result.reason).toContain("numeric failure");
+      expect(result.lastGood).toEqual(first.replay);
+      expect(result.lastGood.asOf).toBe(AS_OF_WEEK_1); // 如实反映旧时点
     }
   });
 
@@ -335,12 +336,12 @@ describe("失败快照判别表", () => {
       expect(fromDisk.replay).toEqual(first.replay);
     }
 
-    // 同输入曾成功而重算失败：复用旧成功结果 ready
+    // 同输入曾成功而 asOf 跨段后重算失败：旧快照已过期，只能报 stale
     replaySpy.mockImplementation(() => {
       throw new RangeError("numeric failure");
     });
     const sameInput = loadGlickoSnapshot(reopened, AS_OF_WEEK_2);
-    expect(sameInput.state).toBe("ready");
+    expect(sameInput.state).toBe("stale");
 
     // 输入已变 + 失败：磁盘上旧输入缓存只给 stale，不冒充当前
     reopened.prepare(`UPDATE matches SET score_a = 5 WHERE id = 1`).run();
