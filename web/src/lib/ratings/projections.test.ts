@@ -62,6 +62,7 @@ function makeReplay(input: {
   lastFinal: Record<string, RatingState>;
   events: RatingEvent[];
   asOf?: string;
+  issues?: RatingReplay["issues"];
 }): RatingReplay {
   const matchEstimates: Record<string, MatchEstimate> = {};
   for (const event of input.events) {
@@ -77,7 +78,7 @@ function makeReplay(input: {
     lastFinal: input.lastFinal,
     events: input.events,
     matchEstimates,
-    issues: [],
+    issues: input.issues ?? [],
     nextBoundary: input.currentSegment.end,
   };
 }
@@ -468,5 +469,97 @@ describe("projectRatingView 峰值", () => {
     });
     // 3 号从未有 Final → null。
     expect(view.peakFinal["3"]).toBeNull();
+  });
+});
+
+describe("projectRatingView 个人档案契约", () => {
+  const seg = segment(
+    "2026-09-21:2026-09-21",
+    "2026-09-21",
+    "2026-09-21T00:00:00+08:00",
+    "2026-09-28T00:00:00+08:00",
+    "2026-07-01",
+    1
+  );
+
+  it("issues 原样透出（无效记录原因给个人页提示）", () => {
+    const issues: RatingReplay["issues"] = [
+      { matchId: 3, reason: "invalid_date" },
+      { matchId: 1, reason: "invalid_score" },
+      { matchId: 2, reason: "duplicate_player" },
+      { matchId: 4, reason: "unknown_player" },
+    ];
+    const replay = makeReplay({
+      currentSegment: seg,
+      current: { "1": state(1010) },
+      lastFinal: { "1": state(1000) },
+      events: [matchEvent(seg.id, 1, "2026-09-22", [change(1, 1000, 1010)])],
+      issues,
+    });
+    const view = projectRatingView(replay, DIRECTORY.slice(0, 2));
+
+    expect(view.issues).toEqual(issues);
+  });
+
+  it("当前开放区段列于末尾：matches 按重放顺序、correction 为空、reset 为 null", () => {
+    const replay = makeReplay({
+      currentSegment: seg,
+      current: { "1": state(1180), "2": state(990) },
+      lastFinal: {},
+      events: [
+        matchEvent(seg.id, 2, "2026-09-23", [change(1, 1000, 1180)]),
+        matchEvent(seg.id, 1, "2026-09-22", [change(1, 990, 1000)]),
+      ],
+    });
+    const view = projectRatingView(replay, DIRECTORY.slice(0, 2));
+
+    const current = view.weekSegments[view.weekSegments.length - 1];
+    expect(current.segmentId).toBe(seg.id);
+    expect(current.weekStart).toBe("2026-09-21");
+    expect(current.seasonId).toBe("2026-07-01");
+    // matches 保留重放顺序（不按比赛日重排），个人页按此列出逐场预估。
+    expect(current.matches.map((m) => m.matchId)).toEqual([2, 1]);
+    expect(current.correction).toEqual({});
+    expect(current.reset).toBeNull();
+  });
+
+  it("周区段携带 start/end/h 供明细展示，已结算区段 correction 保留原始值", () => {
+    const settledSeg = segment(
+      "2026-09-14:2026-09-14",
+      "2026-09-14",
+      "2026-09-14T00:00:00+08:00",
+      "2026-09-21T00:00:00+08:00",
+      "2026-07-01",
+      1
+    );
+    const finalEvent = {
+      kind: "weekly_final" as const,
+      eventId: "weekly_final:2026-09-14:2026-09-14",
+      segment: settledSeg,
+      start: { "1": state(1000), "2": state(1000) },
+      estimatedEnd: { "1": state(1042.4), "2": state(1000) },
+      final: { "1": state(1037.9), "2": state(1000) },
+      correction: { "1": -4.5, "2": 0 },
+    };
+    const replay = makeReplay({
+      currentSegment: seg,
+      current: { "1": state(1100), "2": state(1000) },
+      lastFinal: { "1": state(1037.9), "2": state(1000) },
+      events: [matchEvent(settledSeg.id, 1, "2026-09-15", [change(1, 1000, 1042.4)]), finalEvent],
+    });
+    const view = projectRatingView(replay, DIRECTORY.slice(0, 2));
+
+    const settled = view.weekSegments[0];
+    expect(settled.segmentId).toBe(settledSeg.id);
+    expect(settled.start).toBe(settledSeg.start);
+    expect(settled.end).toBe(settledSeg.end);
+    expect(settled.h).toBe(1);
+    // 校准保留原始浮点（展示取整是组件职责）。
+    expect(settled.correction["1"]).toBe(-4.5);
+    // 个人页从 points 的 weekly_final 取段末 Final 展示值。
+    const finalPoint = view.points.find(
+      (p) => p.kind === "weekly_final" && p.playerId === 1
+    );
+    expect(finalPoint).toMatchObject({ segment: settledSeg.id, r: 1037.9 });
   });
 });
