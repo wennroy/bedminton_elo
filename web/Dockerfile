@@ -36,6 +36,14 @@ RUN npm install -g tsx
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/scripts/migrate-legacy.ts ./scripts/migrate-legacy.ts
+# 评分配置 CLI（docker compose exec web tsx scripts/rating-config.ts status/init/activate）。
+# 只复制其纯 TS 依赖链（相对导入运行时解析；ratings/types 仅类型导入也一并带上），
+# 不含测试文件。
+COPY --from=builder /app/scripts/rating-config.ts ./scripts/rating-config.ts
+COPY --from=builder /app/src/lib/rating-config.ts ./src/lib/rating-config.ts
+COPY --from=builder /app/src/lib/ratings/calendar.ts ./src/lib/ratings/calendar.ts
+COPY --from=builder /app/src/lib/ratings/config.ts ./src/lib/ratings/config.ts
+COPY --from=builder /app/src/lib/ratings/types.ts ./src/lib/ratings/types.ts
 COPY --from=builder /app/src/lib/db.ts ./src/lib/db.ts
 COPY --from=builder /app/src/lib/schema.sql ./src/lib/schema.sql
 EXPOSE 3000
