@@ -4,13 +4,18 @@ import * as React from "react";
 import Link from "next/link";
 import { ArrowRight, Plus } from "lucide-react";
 import { getMyPlayerId } from "@/lib/identity";
+import type { RatingStatus } from "@/lib/ratings/types";
 import { IdentityPicker } from "@/components/identity-picker";
 
 export interface OverviewStat {
-  elo: number;
-  rank: number;
+  /** 新版未评级为 null，显示「—」；Legacy 恒为整数。 */
+  elo: number | null;
+  /** 新版未评级为 null；Legacy 恒有名次。 */
+  rank: number | null;
   /** 无比赛时为 null，显示「—」 */
   winRate: number | null;
+  /** 新版评分状态；Legacy 不传（不显示状态标记）。 */
+  status?: RatingStatus;
 }
 
 interface OverviewSummaryProps {
@@ -18,6 +23,8 @@ interface OverviewSummaryProps {
   stats: Record<number, OverviewStat>;
   /** 本周全员比赛场数（公共数据，不随身份变化） */
   weekMatchCount: number;
+  /** 积分标签：Legacy「当前 ELO」，新版「当前评分」。 */
+  ratingLabel?: string;
 }
 
 /** 深底个人摘要卡（bg-court，两主题恒深色，卡内浅色文字沿用 mock welcome-card 用色） */
@@ -25,6 +32,7 @@ export function OverviewSummary({
   players,
   stats,
   weekMatchCount,
+  ratingLabel = "当前 ELO",
 }: OverviewSummaryProps) {
   const [myId, setMyId] = React.useState<number | null>(null);
   const [pickerMounted, setPickerMounted] = React.useState(false);
@@ -57,17 +65,21 @@ export function OverviewSummary({
         <h2 className="text-[23px] font-semibold">
           {me ? me.name : "尚未选择身份"}
         </h2>
-        {stat && (
+        {stat && stat.rank !== null && (
           <span className="text-[11px] text-[#c4d0bd]">
             俱乐部 #{stat.rank}
+            {stat.status === "estimated" ? " · 本周预估" : ""}
           </span>
+        )}
+        {stat && stat.rank === null && (
+          <span className="text-[11px] text-[#c4d0bd]">尚未评级</span>
         )}
       </div>
 
       <div className="relative mt-6 mb-6 grid w-full grid-cols-[1fr_1fr_1.2fr] gap-4 min-[761px]:gap-[26px]">
         <div className="flex flex-col">
-          <span className={statLabel}>当前 ELO</span>
-          <strong className={statValue}>{stat ? stat.elo : "—"}</strong>
+          <span className={statLabel}>{ratingLabel}</span>
+          <strong className={statValue}>{stat && stat.elo !== null ? stat.elo : "—"}</strong>
         </div>
         <div className="flex flex-col">
           <span className={statLabel}>生涯胜率</span>
