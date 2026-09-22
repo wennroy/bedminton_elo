@@ -475,6 +475,34 @@ describe("weekly glicko2 分支", () => {
     expect(stats.weekNumber).toBe(40);
   });
 
+  it("无新比赛的周界跨越：estimated 变 final，校准与 Final 出现且数值一致", () => {
+    const [a, b, c, d] = dbPlayers;
+    addMatch({ pa1: a, pa2: b, pb1: c, pb2: d, scoreA: 21, scoreB: 15, playedAt: "2026-10-05" });
+    const inWeek = glickoStats("2026-10-05", "2026-10-06T20:00:00+08:00");
+    const inReport = inWeek.ratingReport!;
+    expect(inReport.segments[0].status).toBe("estimated");
+    // 校准尚未发生：不显示为 0 的「正式校准」，无 Final 值。
+    expect(
+      inReport.segments[0].players.every((p) => p.finalR === null)
+    ).toBe(true);
+
+    // 没有新比赛，仅时钟越过周一界：同一段从 Estimated 变 Final。
+    const nextWeek = glickoStats("2026-10-05", "2026-10-12T20:00:00+08:00");
+    const report = nextWeek.ratingReport!;
+    expect(report.segments).toHaveLength(1);
+    expect(report.segments[0].status).toBe("final");
+    for (const p of report.segments[0].players) {
+      expect(p.finalR).not.toBeNull();
+      expect(
+        Math.abs(p.finalR! - (p.endEstimatedR + p.correction))
+      ).toBeLessThanOrEqual(1);
+    }
+    // 内容指纹随边界状态变化（DB 未变也要失效，供 OG ETag 使用）。
+    const etagA = weeklyDataVersion(inWeek, weeklyDataVersionContext(inWeek));
+    const etagB = weeklyDataVersion(nextWeek, weeklyDataVersionContext(nextWeek));
+    expect(etagB).not.toBe(etagA);
+  });
+
   it("冷门用赛前 Estimated 概率：无周末 Final 泄漏，补录重算不变", () => {
     const [a, b, c, d] = dbPlayers;
     // 第 1 周：A/B 两连胜 C/D，建立实力差距。

@@ -11,6 +11,7 @@ import {
   OG_DESIGN_VERSION,
   type FunMatch,
   type UpsetMatch,
+  type WeeklyRatingReport,
   type WeeklyStats,
 } from "@/lib/weekly";
 import { readRatingConfig } from "@/lib/rating-config";
@@ -324,6 +325,248 @@ function FunRow({
   );
 }
 
+/**
+ * glicko2 评分变化版块（d3 新版块）：与网页共同消费 ratingReport。
+ * 段级状态（正式 Final / 预估 Estimated）分列；跨季周两段纵向堆叠不越界；
+ * 长姓名按宽度截断；每段最多 3 人，超出提示见网页，保证极端周不顶到页脚。
+ */
+function RatingReportBlock({ report }: { report: WeeklyRatingReport }) {
+  const MAX_ROWS = 3;
+  const deltaColor = (value: number) =>
+    value > 0 ? WIN : value < 0 ? LOSS : MUTED;
+  const fmtDelta = (value: number) => `${value > 0 ? "+" : ""}${value}`;
+
+  const segments: ReactNode[] = [];
+  for (const segment of report.segments) {
+    if (segment.players.length === 0) continue;
+    const players = [...segment.players]
+      .sort(
+        (a, b) => b.estimatedChange - a.estimatedChange || a.playerId - b.playerId
+      )
+      .slice(0, MAX_ROWS);
+    segments.push(
+      <div
+        key={segment.segmentId}
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          marginTop: segments.length === 0 ? 0 : 22,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "baseline", gap: 14 }}>
+          <span style={{ display: "flex", fontSize: 24, fontWeight: 700 }}>
+            {`赛季 ${segment.seasonId ?? "—"} · ${segment.weekStart
+              .slice(5)
+              .replace("-", ".")} 起`}
+          </span>
+          <span
+            style={{
+              display: "flex",
+              fontSize: 20,
+              fontWeight: 700,
+              color: segment.status === "final" ? WIN : MUTED,
+            }}
+          >
+            {segment.status === "final" ? "正式 Final" : "预估 Estimated"}
+          </span>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", marginTop: 8 }}>
+          {players.map((p) => (
+            <div
+              key={p.playerId}
+              style={{ display: "flex", alignItems: "center", padding: "8px 0" }}
+            >
+              <span
+                style={{
+                  display: "flex",
+                  fontSize: 24,
+                  fontWeight: 650,
+                  width: 300,
+                }}
+              >
+                {truncate(p.name, 12)}
+              </span>
+              <span style={{ display: "flex", fontSize: 20, color: MUTED }}>
+                {p.matchesPlayed} 场
+              </span>
+              <div
+                style={{
+                  marginLeft: "auto",
+                  display: "flex",
+                  alignItems: "baseline",
+                  gap: 18,
+                }}
+              >
+                <span
+                  style={{
+                    display: "flex",
+                    alignItems: "baseline",
+                    fontSize: 28,
+                    fontWeight: 800,
+                    color: deltaColor(p.estimatedChange),
+                  }}
+                >
+                  {fmtDelta(p.estimatedChange)}
+                  <span
+                    style={{ fontSize: 18, fontWeight: 600, color: MUTED, marginLeft: 4 }}
+                  >
+                    预估
+                  </span>
+                </span>
+                {p.finalR !== null ? (
+                  <>
+                    {p.correction !== 0 ? (
+                      <span
+                        style={{
+                          display: "flex",
+                          alignItems: "baseline",
+                          fontSize: 24,
+                          fontWeight: 700,
+                          color: deltaColor(p.correction),
+                        }}
+                      >
+                        {`校准 ${fmtDelta(p.correction)}`}
+                      </span>
+                    ) : null}
+                    <span
+                      style={{
+                        display: "flex",
+                        alignItems: "baseline",
+                        fontSize: 30,
+                        fontWeight: 800,
+                      }}
+                    >
+                      {p.finalR}
+                      <span
+                        style={{ fontSize: 18, fontWeight: 600, color: MUTED, marginLeft: 4 }}
+                      >
+                        Final
+                      </span>
+                    </span>
+                  </>
+                ) : (
+                  <span
+                    style={{
+                      display: "flex",
+                      alignItems: "baseline",
+                      fontSize: 26,
+                      fontWeight: 750,
+                    }}
+                  >
+                    {p.endEstimatedR}
+                    <span
+                      style={{ fontSize: 18, fontWeight: 600, color: MUTED, marginLeft: 4 }}
+                    >
+                      当前
+                    </span>
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+          {segment.players.length > MAX_ROWS ? (
+            <div style={{ display: "flex", fontSize: 18, color: MUTED, marginTop: 4 }}>
+              {`其余 ${segment.players.length - MAX_ROWS} 人见网页周报`}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  const resets: ReactNode[] = [];
+  for (const reset of report.resets) {
+    const changes = reset.changes.slice(0, MAX_ROWS);
+    resets.push(
+      <div
+        key={reset.segmentId}
+        style={{ display: "flex", flexDirection: "column", marginTop: 18 }}
+      >
+        <div style={{ display: "flex", fontSize: 20, fontWeight: 700, color: MUTED }}>
+          {`赛季重置 · ${reset.seasonId} 开始`}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", marginTop: 6 }}>
+          {changes.map((c) => (
+            <div
+              key={c.playerId}
+              style={{ display: "flex", alignItems: "center", padding: "5px 0" }}
+            >
+              <span
+                style={{
+                  display: "flex",
+                  fontSize: 22,
+                  fontWeight: 650,
+                  width: 300,
+                }}
+              >
+                {truncate(c.name, 12)}
+              </span>
+              <span style={{ display: "flex", fontSize: 20, color: MUTED }}>
+                {`${c.beforeR} → ${c.afterR}`}
+              </span>
+              <span
+                style={{
+                  marginLeft: "auto",
+                  display: "flex",
+                  fontSize: 24,
+                  fontWeight: 800,
+                  color: deltaColor(c.delta),
+                }}
+              >
+                {fmtDelta(c.delta)}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        marginTop: 40,
+        borderRadius: 28,
+        background: SURFACE,
+        border: `2px solid ${LINE}`,
+        padding: "26px 36px",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "baseline", gap: 16 }}>
+        <span style={{ display: "flex", fontSize: 28, fontWeight: 750 }}>
+          评分变化
+        </span>
+        <span
+          style={{
+            display: "flex",
+            fontSize: 20,
+            fontWeight: 700,
+            letterSpacing: 3,
+            color: MUTED,
+          }}
+        >
+          RATING
+        </span>
+        <span
+          style={{
+            marginLeft: "auto",
+            display: "flex",
+            fontSize: 20,
+            color: MUTED,
+          }}
+        >
+          {`模型 ${report.version}`}
+          {report.freshness === "stale" ? " · 最后成功结算" : ""}
+        </span>
+      </div>
+      {segments}
+      {resets}
+    </div>
+  );
+}
+
 function WeeklyCard({
   stats,
   qrDataUrl,
@@ -332,6 +575,12 @@ function WeeklyCard({
   qrDataUrl: string;
 }) {
   const hasData = stats.attendance.length > 0;
+  const report = stats.ratingReport;
+  // 有评分内容才换新版块；空周（无比赛、无重置）保留原三榜版式。
+  const hasRatingReport =
+    report !== undefined &&
+    (report.resets.length > 0 ||
+      report.segments.some((s) => s.players.length > 0));
 
   const eloColor = (change: number) =>
     change > 0 ? WIN : change < 0 ? LOSS : MUTED;
@@ -355,15 +604,20 @@ function WeeklyCard({
         unit: "胜",
       })),
     },
-    {
-      title: "ELO 涨跌榜",
-      sub: "ELO CHANGE",
-      rows: stats.eloChanges.slice(0, 3).map((s) => ({
-        name: truncate(s.name, 11),
-        value: `${s.change > 0 ? "+" : ""}${s.change}`,
-        valueColor: eloColor(s.change),
-      })),
-    },
+    // glicko2 模式下 ELO 涨跌榜由评分变化版块接替（eloChanges 仅 Legacy 分支）。
+    ...(hasRatingReport
+      ? []
+      : [
+          {
+            title: "ELO 涨跌榜",
+            sub: "ELO CHANGE",
+            rows: stats.eloChanges.slice(0, 3).map((s) => ({
+              name: truncate(s.name, 11),
+              value: `${s.change > 0 ? "+" : ""}${s.change}`,
+              valueColor: eloColor(s.change),
+            })),
+          },
+        ]),
   ];
 
   const funRows: ReactNode[] = [];
@@ -548,6 +802,11 @@ function WeeklyCard({
           ))}
         </div>
       )}
+
+      {/* 评分变化：glicko2 新版块（d3），与网页共同消费 ratingReport */}
+      {hasRatingReport && report ? (
+        <RatingReportBlock report={report} />
+      ) : null}
 
       {/* 最佳组合:深色 court 横条 */}
       {stats.bestPair && (

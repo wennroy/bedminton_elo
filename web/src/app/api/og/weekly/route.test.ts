@@ -217,6 +217,32 @@ describe.sequential("og/weekly API", () => {
     expect(res.headers.get("etag")).toBe(etag);
   });
 
+  it("glicko2 模式渲染 PNG（评分变化版块）且 etag 与数据指纹一致", async () => {
+    initializeRatingConfig({ firstSeasonStart: "2026-07-01" }, getDb());
+    seedFourPlayersGlickoWeek();
+    const etag = glickoEtag(GLICKO_WEEK, AS_OF_IN_WEEK);
+    const res = await GET(
+      new Request(
+        `http://localhost/api/og/weekly?week=${GLICKO_WEEK}&rating=glicko2&asOf=${encodeURIComponent(AS_OF_IN_WEEK)}`
+      )
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("image/png");
+    expect(res.headers.get("etag")).toBe(etag);
+    expect(res.headers.get("cache-control")).toBe("no-cache");
+    const png = await res.arrayBuffer();
+    expect(png.byteLength).toBeGreaterThan(0);
+  }, 30000);
+
+  it("glicko2 分享指纹随改名变化（网页与图片同源消费）", async () => {
+    initializeRatingConfig({ firstSeasonStart: "2026-07-01" }, getDb());
+    seedFourPlayersGlickoWeek();
+    const before = glickoEtag(GLICKO_WEEK, AS_OF_IN_WEEK);
+    getDb().prepare("UPDATE players SET name = ? WHERE id = 1").run("新名字");
+    const after = glickoEtag(GLICKO_WEEK, AS_OF_IN_WEEK);
+    expect(after).not.toBe(before);
+  });
+
   it("glicko2 非法 week 日期返回 400", async () => {
     initializeRatingConfig({ firstSeasonStart: "2026-07-01" }, getDb());
     const res = await GET(

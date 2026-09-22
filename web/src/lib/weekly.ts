@@ -312,7 +312,9 @@ export function weeklyDataVersion(
 // 分享图的设计指纹:版式/配色变更时递增。ETag 只指纹数据时,数据未变的周
 // 在换版式后仍会对旧缓存 304,客户端永远显示旧设计(v1.5.1 踩过的坑)。
 // 放在 lib 是因为 route 文件只允许导出 HTTP 方法,build 期类型检查会拦。
-export const OG_DESIGN_VERSION = "d2";
+// d3: glicko2 模式新增「评分变化」版块（段级 Estimated/Final + 重置），
+// 同阵容行数上限与长姓名截断；legacy 版式不变。
+export const OG_DESIGN_VERSION = "d3";
 
 /** 上海周一界的本地日期加减（纯 UTC 数学，不依赖主机 TZ）。 */
 function addDaysLocal(localDate: string, days: number): string {
