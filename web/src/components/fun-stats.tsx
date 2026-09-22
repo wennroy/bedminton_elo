@@ -24,7 +24,8 @@ import { cn } from "@/lib/utils";
 interface SwitcherPlayer {
   id: number;
   name: string;
-  elo: number;
+  /** legacy 为整数 ELO；glicko2 为展示评分，未评级为 null。 */
+  elo: number | null;
 }
 
 export function ProfileHeader({
@@ -32,11 +33,15 @@ export function ProfileHeader({
   name,
   rank,
   players,
+  ratingQuery = "",
 }: {
   id: number;
   name: string;
-  rank: number;
+  /** glicko2 未评级无排名时为 null，显示「—」。 */
+  rank: number | null;
   players: SwitcherPlayer[];
+  /** 切换球员链接保留评分模式，如 "?rating=glicko2"；Legacy 不需要。 */
+  ratingQuery?: string;
 }) {
   const router = useRouter();
   const [myId, setMyId] = React.useState<number | null>(null);
@@ -74,7 +79,9 @@ export function ProfileHeader({
           </h1>
           <div className="text-[11px] text-muted-foreground max-[760px]:text-[10px]">
             俱乐部排名{" "}
-            <strong className="font-semibold text-foreground">#{rank}</strong>
+            <strong className="font-semibold text-foreground">
+              {rank !== null ? `#${rank}` : "—"}
+            </strong>
             <span className="px-2">·</span>双打球员
           </div>
         </div>
@@ -126,7 +133,7 @@ export function ProfileHeader({
                     onClick={() => {
                       if (!selected) {
                         setOpen(false);
-                        router.push(`/players/${p.id}`);
+                        router.push(`/players/${p.id}${ratingQuery}`);
                       }
                     }}
                     aria-label={`${p.name}${selected ? "，当前选择" : ""}`}
@@ -143,7 +150,11 @@ export function ProfileHeader({
                         {p.name}
                       </span>
                       <span className="block text-[10px] text-muted-foreground">
-                        {selected ? "当前选择" : `ELO ${p.elo}`}
+                        {selected
+                          ? "当前选择"
+                          : p.elo !== null
+                            ? `评分 ${p.elo}`
+                            : "未评级"}
                       </span>
                     </span>
                   </button>
@@ -157,8 +168,36 @@ export function ProfileHeader({
   );
 }
 
-/** 「更多指标」展开区：TrueSkill μ/σ/区间、最长连胜、峰值 ELO 及日期，默认折叠 */
-export function MoreMetrics({
+/** 「更多指标」展开区，默认折叠。
+ * legacy：TrueSkill μ/σ/区间、最长连胜、峰值 ELO 及日期（逐比特不动）；
+ * glicko2：当前 RD、最长连胜、正式峰值（peakFinal）及达成时点——
+ * 不展示 TrueSkill，避免与新模型单位混用。
+ */
+export type MoreMetricsProps =
+  | {
+      model: "legacy";
+      mu: number;
+      sigma: number;
+      longestWinStreak: number;
+      peakElo: number;
+      peakEloDate: string | null;
+    }
+  | {
+      model: "glicko2";
+      /** 当前状态的不确定性；未评级为 null。 */
+      rd: number | null;
+      longestWinStreak: number;
+      /** 正式峰值（只来自周 Final）；从未结算为 null。 */
+      peak: { r: number; at: string } | null;
+    };
+
+export function MoreMetrics(props: MoreMetricsProps) {
+  if (props.model === "glicko2") return <Glicko2MoreMetrics {...props} />;
+  return <LegacyMoreMetrics {...props} />;
+}
+
+/** TrueSkill μ/σ/区间、最长连胜、峰值 ELO 及日期（legacy 口径）。 */
+function LegacyMoreMetrics({
   mu,
   sigma,
   longestWinStreak,
@@ -183,6 +222,56 @@ export function MoreMetrics({
       label: "峰值 ELO",
       value: String(peakElo),
       sub: peakEloDate ? `${peakEloDate} 达成` : undefined,
+    },
+  ];
+
+  return (
+    <CollapsibleSection title="更多指标" defaultOpen={false}>
+      <div className="grid grid-cols-2 gap-x-6 gap-y-4 pt-1 min-[761px]:grid-cols-3">
+        {items.map((item) => (
+          <div key={item.label}>
+            <div className="text-[11px] text-muted-foreground">{item.label}</div>
+            <div className="mt-0.5 font-num text-xl text-card-foreground">
+              {item.value}
+            </div>
+            {item.sub && (
+              <div className="text-[10px] text-muted-foreground">{item.sub}</div>
+            )}
+          </div>
+        ))}
+      </div>
+    </CollapsibleSection>
+  );
+}
+
+/** ISO 瞬刻 → 本地 YYYY-MM-DD：周 Final/重置为上海午夜，截断 UTC 字符串会差一天。 */
+function localDateOfInstant(iso: string): string {
+  const d = new Date(iso);
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+/** 新版 RD / 最长连胜 / 正式峰值（只取周 Final，不含重置与 Estimated）。 */
+function Glicko2MoreMetrics({
+  rd,
+  longestWinStreak,
+  peak,
+}: {
+  rd: number | null;
+  longestWinStreak: number;
+  peak: { r: number; at: string } | null;
+}) {
+  const items: { label: string; value: string; sub?: string }[] = [
+    {
+      label: "评分不确定性 RD",
+      value: rd !== null ? String(Math.round(rd)) : "—",
+    },
+    { label: "最长连胜", value: `${longestWinStreak} 连胜` },
+    {
+      label: "峰值评分",
+      value: peak !== null ? String(Math.round(peak.r)) : "—",
+      sub: peak ? `${localDateOfInstant(peak.at)} 达成` : "尚未产生周正式结算",
     },
   ];
 

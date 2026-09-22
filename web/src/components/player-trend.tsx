@@ -4,17 +4,51 @@ import * as React from "react";
 import {
   AreaChart,
   Area,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
+  Tooltip,
   ResponsiveContainer,
 } from "recharts";
 import type { PlayerMatchRecord } from "@/lib/stats";
+import type { RatingView } from "@/lib/ratings/view-types";
+import {
+  buildTrendRows,
+  displayRatingRows,
+  type DisplayTrendRow,
+} from "@/lib/ratings/chart-data";
 import { cn } from "@/lib/utils";
 
 export interface TrendPoint {
   date: string;
   elo: number;
+}
+
+/**
+ * Legacy：单 ELO 面积图逐比特不动。
+ * glicko2：消费同一份 RatingView 投影的单人系列——正式周节点实线、
+ * 当前区段逐场预估虚线、周校准与季重置独立 tooltip；历史单场始终标 Estimated。
+ */
+export type PlayerTrendProps =
+  | {
+      model: "legacy";
+      playerName: string;
+      /** 该球员全部 ELO 快照，按日升序 */
+      points: TrendPoint[];
+    }
+  | {
+      model: "glicko2";
+      playerName: string;
+      playerId: number;
+      view: RatingView;
+      currentSegmentId: string;
+    };
+
+export function PlayerTrend(props: PlayerTrendProps) {
+  if (props.model === "glicko2") return <Glicko2PlayerTrend {...props} />;
+  return <LegacyPlayerTrend {...props} />;
 }
 
 type RangeKey = "4" | "12" | "all";
@@ -42,8 +76,14 @@ function shortDate(date: string): string {
   return date.slice(5).replace("-", ".");
 }
 
+/** 事件时点 → 本地日期：比赛事实日期原样返回，ISO 瞬刻转本地（周界 Final/重置是上海午夜）。 */
+function eventLocalDate(at: string): string {
+  if (at.length === 10) return at;
+  return localDateString(new Date(at));
+}
+
 /** 个人 ELO 趋势（mock profile chart）：周期只过滤图表，不改生涯统计 */
-export function PlayerTrend({
+function LegacyPlayerTrend({
   playerName,
   points,
 }: {
@@ -225,12 +265,15 @@ export function RecentForm({
   avgPointDiff,
   peakElo,
   currentElo,
+  peakLabel = "生涯最高积分",
 }: {
   /** 全部比赛记录，最新在前 */
   matches: PlayerMatchRecord[];
   avgPointDiff: number;
   peakElo: number;
   currentElo: number;
+  /** 峰值口径名称：legacy 为「生涯最高积分」，glicko2 为「生涯最高评分」 */
+  peakLabel?: string;
 }) {
   // 左早右晚
   const recent = matches.slice(0, 8).reverse();
@@ -315,13 +358,310 @@ export function RecentForm({
           "完成首场比赛后，这里会显示与生涯峰值的距离。"
         ) : gap > 0 ? (
           <>
-            目前距离生涯最高积分{" "}
+            目前距离{peakLabel}{" "}
             <strong className="font-semibold text-win">{gap} 分</strong>。
           </>
         ) : (
-          "目前正处于生涯最高积分。"
+          `目前正处于${peakLabel}。`
         )}
       </div>
+    </section>
+  );
+}
+
+/** 个人曲线 tooltip：周正式结算给校准、季重置给重置增量；逐场预估随读数。 */
+function PlayerEventTooltip({
+  active,
+  row,
+  playerId,
+}: {
+  active?: boolean;
+  row?: DisplayTrendRow;
+  playerId: number;
+}) {
+  if (!active || !row) return null;
+  const deltaClass = (delta: number) =>
+    cn(
+      "font-num",
+      delta > 0 ? "text-win" : delta < 0 ? "text-loss" : "text-muted-foreground"
+    );
+  const formatDelta = (delta: number) =>
+    delta > 0 ? `+${delta}` : `${delta}`;
+
+  if (row.kind === "weekly_final") {
+    const correction = row.correction[playerId];
+    if (correction === undefined) return null;
+    return (
+      <div className="rounded-lg border border-border bg-card px-3 py-2 text-[11px] shadow-md">
+        <div className="mb-1 font-bold text-card-foreground">
+          周正式结算 · 校准
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <span className="text-muted-foreground">评分校准</span>
+          <span className={deltaClass(correction)}>{formatDelta(correction)}</span>
+        </div>
+      </div>
+    );
+  }
+  if (row.kind === "season_reset") {
+    const delta = row.resetDeltas[playerId];
+    if (delta === undefined) return null;
+    return (
+      <div className="rounded-lg border border-border bg-card px-3 py-2 text-[11px] shadow-md">
+        <div className="mb-1 font-bold text-card-foreground">
+          赛季重置 · 软回中
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <span className="text-muted-foreground">重置变化</span>
+          <span className={deltaClass(delta)}>{formatDelta(delta)}</span>
+        </div>
+      </div>
+    );
+  }
+  return null;
+}
+
+/**
+ * 个人评分曲线（glicko2）：与全员大图同一视觉语义——正式实线、
+ * 当前区段逐场预估虚线、校准/重置独立 tooltip；缺席周沿用最近值不断线。
+ */
+function Glicko2PlayerTrend({
+  playerName,
+  playerId,
+  view,
+  currentSegmentId,
+}: {
+  playerName: string;
+  playerId: number;
+  view: RatingView;
+  currentSegmentId: string;
+}) {
+  const [range, setRange] = React.useState<RangeKey>("4");
+  const [readoutKey, setReadoutKey] = React.useState<string | null>(null);
+
+  const rows = React.useMemo(
+    () =>
+      displayRatingRows(buildTrendRows(view.points, view.weekSegments)).filter(
+        // 只保留该球员自身有事件的行（逐场参赛/周 Final/季重置）；
+        // 缺席间隔由连线沿用，不为别人的比赛造平点。
+        (row) => row.r[playerId] !== undefined
+      ),
+    [view.points, view.weekSegments, playerId]
+  );
+  const rowByKey = React.useMemo(
+    () => new Map(rows.map((row) => [row.key, row])),
+    [rows]
+  );
+
+  // 周期只过滤图表，不改生涯统计；cutoff 前最后一个事件值已由沿用规则带入窗口。
+  const windowRows = React.useMemo(() => {
+    const cfg = RANGES.find((r) => r.key === range)!;
+    if (cfg.weeks === null) return rows;
+    const cutoff = cutoffDate(cfg.weeks);
+    return rows.filter((row) => eventLocalDate(row.at) >= cutoff);
+  }, [rows, range]);
+
+  const chartData = React.useMemo(
+    () =>
+      windowRows.map((row) => {
+        const value = row.values[playerId];
+        const estimated =
+          row.kind === "match_estimated" &&
+          row.segment === currentSegmentId &&
+          row.r[playerId] !== undefined;
+        return {
+          key: row.key,
+          kind: row.kind,
+          label: shortDate(eventLocalDate(row.at)),
+          final: value,
+          ...(estimated ? { est: value } : {}),
+        };
+      }),
+    [windowRows, playerId, currentSegmentId]
+  );
+
+  const latest = windowRows[windowRows.length - 1];
+  const first = windowRows[0];
+  const diff =
+    latest !== undefined && first !== undefined
+      ? (latest.values[playerId] ?? 0) - (first.values[playerId] ?? 0)
+      : 0;
+  const shown =
+    (readoutKey !== null && rowByKey.get(readoutKey)) || latest || null;
+  const shownValue = shown ? shown.values[playerId] : undefined;
+
+  return (
+    <section className="min-w-0 rounded-2xl border border-border bg-card p-5 min-[761px]:p-[25px]">
+      <div className="mb-[22px] flex flex-wrap items-center justify-between gap-3 max-[760px]:mb-[18px]">
+        <div>
+          <h2 className="text-lg font-bold text-card-foreground max-[760px]:text-[15px]">
+            评分趋势
+          </h2>
+          <div className="mt-[3px] text-[9px] font-bold tracking-[1.5px] text-muted-foreground">
+            RATING PROGRESSION
+          </div>
+        </div>
+        <div
+          className="inline-flex gap-[2px] rounded-[7px] border border-border p-[3px]"
+          role="group"
+          aria-label="评分趋势周期"
+        >
+          {RANGES.map((r) => (
+            <button
+              key={r.key}
+              type="button"
+              aria-pressed={range === r.key}
+              onClick={() => {
+                setRange(r.key);
+                setReadoutKey(null);
+              }}
+              className={cn(
+                "min-h-[30px] rounded px-2.5 text-[10px] whitespace-nowrap transition-colors max-[760px]:min-h-9 max-[760px]:px-2",
+                range === r.key
+                  ? "bg-secondary font-bold text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {rows.length === 0 ? (
+        <div className="grid min-h-[215px] place-items-center rounded-[10px] bg-secondary text-xs text-muted-foreground">
+          还没有比赛数据，记一场后这里会出现趋势。
+        </div>
+      ) : (
+        <>
+          <div className="mb-3 flex items-center justify-between gap-2.5 text-[10px] text-muted-foreground">
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="flex items-center gap-1.5">
+                <span className="h-[3px] w-4 rounded-[3px] bg-chart" />
+                {playerName}（正式）
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-0 w-4 border-t-2 border-dashed border-chart" />
+                本周预估
+              </span>
+            </span>
+            <span aria-live="polite">
+              {shown && shownValue !== undefined
+                ? `${shortDate(eventLocalDate(shown.at))} · 评分 ${shownValue}${
+                    shown.kind === "match_estimated"
+                      ? shown.segment === currentSegmentId
+                        ? " · 预估"
+                        : " · 历史预估"
+                      : shown.kind === "season_reset"
+                        ? " · 重置"
+                        : " · 正式"
+                  }`
+                : "—"}
+            </span>
+          </div>
+          <div className="h-[215px] min-[1600px]:h-[260px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart
+                data={chartData}
+                margin={{ top: 8, right: 8, bottom: 4, left: 0 }}
+                onMouseMove={(state) => {
+                  const key = (state as { activeLabel?: string | number })
+                    ?.activeLabel;
+                  if (typeof key === "string") setReadoutKey(key);
+                }}
+                onMouseLeave={() => setReadoutKey(null)}
+              >
+                <CartesianGrid
+                  strokeDasharray="3 5"
+                  stroke="var(--border)"
+                  vertical={false}
+                />
+                <XAxis
+                  dataKey="key"
+                  tickFormatter={(key) =>
+                    rowByKey.get(String(key))
+                      ? shortDate(eventLocalDate(rowByKey.get(String(key))!.at))
+                      : ""
+                  }
+                  tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+                  tickMargin={6}
+                  minTickGap={40}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <YAxis
+                  domain={["dataMin - 10", "dataMax + 10"]}
+                  tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+                  width={36}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <Tooltip
+                  content={(tooltipProps) => (
+                    <PlayerEventTooltip
+                      active={tooltipProps.active}
+                      row={
+                        tooltipProps.label !== undefined
+                          ? rowByKey.get(String(tooltipProps.label))
+                          : undefined
+                      }
+                      playerId={playerId}
+                    />
+                  )}
+                  cursor={{
+                    stroke: "var(--muted-foreground)",
+                    strokeDasharray: "3 4",
+                    strokeOpacity: 0.55,
+                  }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="final"
+                  name={playerName}
+                  stroke="var(--chart)"
+                  strokeWidth={2.5}
+                  dot={{
+                    r: 2.5,
+                    fill: "var(--card)",
+                    stroke: "var(--chart)",
+                    strokeWidth: 2,
+                  }}
+                  activeDot={{ r: 4 }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="est"
+                  name={`${playerName}（本周预估）`}
+                  stroke="var(--chart)"
+                  strokeWidth={2.5}
+                  strokeDasharray="5 4"
+                  dot={false}
+                  activeDot={{ r: 4 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="mt-[9px] flex justify-between gap-2.5 border-t border-border pt-4 text-[10px] text-muted-foreground max-[760px]:text-[9px]">
+            <span>
+              区间变化{" "}
+              <strong
+                className={cn(
+                  "font-semibold",
+                  diff > 0
+                    ? "text-win"
+                    : diff < 0
+                      ? "text-loss"
+                      : "text-foreground"
+                )}
+              >
+                {diff > 0 ? "+" : ""}
+                {diff} 分
+              </strong>
+            </span>
+            <span>正式为周结算 · 单场为预估 · 触碰数据点查看</span>
+          </div>
+        </>
+      )}
     </section>
   );
 }

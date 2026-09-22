@@ -15,14 +15,23 @@ const FILTERS: { key: Filter; label: string }[] = [
 ];
 
 interface PlayerMatchHistoryProps {
-  /** 全部比赛记录，最新在前；delta 为服务端重放的单场 ELO 变化 */
+  /** 全部比赛记录，最新在前；legacy 时 delta 为服务端重放的单场 ELO 变化 */
   matches: PlayerMatchRecord[];
   playerName: string;
+  /**
+   * legacy（缺省）：delta 列显示 legacy ELO 变化。
+   * glicko2：delta 列改用 matchEstimates 的逐场 Estimated 变化
+   * （key = String(matchId)，null = 该场未产生新模型计分，显示「—」）。
+   */
+  model?: "legacy" | "glicko2";
+  matchEstimates?: Readonly<Record<string, number | null>>;
 }
 
 export function PlayerMatchHistory({
   matches,
   playerName,
+  model = "legacy",
+  matchEstimates,
 }: PlayerMatchHistoryProps) {
   const [filter, setFilter] = React.useState<Filter>("all");
   const [visibleCount, setVisibleCount] = React.useState(PAGE_SIZE);
@@ -61,6 +70,11 @@ export function PlayerMatchHistory({
           <div className="mt-[3px] text-[9px] font-bold tracking-[1.5px] text-muted-foreground">
             MATCH HISTORY
           </div>
+          {model === "glicko2" ? (
+            <div className="mt-1 text-[10px] font-normal tracking-normal text-muted-foreground">
+              单场变化为逐场 Estimated 预估，周一正式结算后可能调整。
+            </div>
+          ) : null}
         </div>
         <div
           className="inline-flex gap-[2px] rounded-[7px] border border-border p-[3px]"
@@ -101,7 +115,12 @@ export function PlayerMatchHistory({
         ) : (
           <>
             {filtered.slice(0, visibleCount).map((m) => (
-              <MatchRow key={m.id} match={m} playerName={playerName} />
+              <MatchRow
+                key={m.id}
+                match={m}
+                playerName={playerName}
+                delta={model === "glicko2" ? (matchEstimates?.[String(m.id)] ?? null) : m.delta}
+              />
             ))}
             <div className="border-t border-border p-2 text-center">
               {hasMore ? (
@@ -134,11 +153,13 @@ export function PlayerMatchHistory({
 function MatchRow({
   match,
   playerName,
+  delta,
 }: {
   match: PlayerMatchRecord;
   playerName: string;
+  /** legacy 为单场 ELO 变化；glicko2 为逐场 Estimated，null 表示该场未计分 */
+  delta: number | null;
 }) {
-  const delta = match.delta;
   return (
     <div className="relative grid grid-cols-[29px_1fr_63px_1fr] items-center gap-[9px] border-t border-border px-[18px] py-[14px] text-xs min-[761px]:grid-cols-[90px_42px_1fr_80px_1fr_60px] min-[761px]:gap-[15px] min-[761px]:px-[25px] min-[761px]:py-[15px]">
       {/* 手机：日期提到行顶，delta 放右上角 */}
@@ -176,10 +197,14 @@ function MatchRow({
       <span
         className={cn(
           "absolute top-3 right-[18px] font-num text-xs min-[761px]:static min-[761px]:text-right min-[761px]:text-[17px]",
-          delta >= 0 ? "text-win" : "text-loss"
+          delta === null
+            ? "text-muted-foreground"
+            : delta >= 0
+              ? "text-win"
+              : "text-loss"
         )}
       >
-        {delta > 0 ? `+${delta}` : delta}
+        {delta === null ? "—" : delta > 0 ? `+${delta}` : delta}
       </span>
     </div>
   );
