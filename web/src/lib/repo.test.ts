@@ -7,6 +7,7 @@ import {
   listPlayers,
   addMatch,
   listMatchesByDate,
+  listRawMatches,
   getMatch,
   deleteMatch,
   recomputeAllRatings,
@@ -103,6 +104,49 @@ describe("repo", () => {
     const id = addMatch({ pa1: a1, pa2: a2, pb1: b1, pb2: b2, scoreA: 21, scoreB: 18, playedAt: "2024-01-01" }, db);
     deleteMatch(id, db);
     expect(listMatchesByDate(db)).toHaveLength(0);
+  });
+
+  it("listRawMatches 不做姓名 JOIN：引用已删球员的比赛不被静默丢掉", () => {
+    const db = mkDb();
+    const [a1, a2, b1, b2, c1] = [
+      addPlayer("A1", db),
+      addPlayer("A2", db),
+      addPlayer("B1", db),
+      addPlayer("B2", db),
+      addPlayer("C1", db),
+    ];
+    addMatch({ pa1: a1, pa2: a2, pb1: b1, pb2: b2, scoreA: 21, scoreB: 18, playedAt: "2024-01-01" }, db);
+    addMatch({ pa1: a1, pa2: b1, pb1: a2, pb2: c1, scoreA: 19, scoreB: 21, playedAt: "2024-01-02" }, db);
+    // 绕过外键校验直接删除球员，制造悬空引用（历史脏数据场景）。
+    db.pragma("foreign_keys = OFF");
+    db.prepare(`DELETE FROM players WHERE id = ?`).run(b2);
+    db.pragma("foreign_keys = ON");
+
+    // 现有姓名 JOIN 查询会静默丢掉含 b2 的那条记录（旧行为，供旧消费者使用）。
+    expect(listMatchesByDate(db)).toHaveLength(1);
+    // 原始查询必须保留全部事实，按 played_at/created_at/id 升序。
+    const raw = listRawMatches(db);
+    expect(raw).toHaveLength(2);
+    expect(raw.map((row) => row.id)).toEqual([1, 2]);
+    expect(raw[0]).toMatchObject({
+      pa1: a1,
+      pa2: a2,
+      pb1: b1,
+      pb2: b2,
+      scoreA: 21,
+      scoreB: 18,
+      playedAt: "2024-01-01",
+    });
+    expect(raw[1]).toMatchObject({
+      pa1: a1,
+      pa2: b1,
+      pb1: a2,
+      pb2: c1,
+      scoreA: 19,
+      scoreB: 21,
+      playedAt: "2024-01-02",
+    });
+    expect(raw[0]).not.toHaveProperty("pa1Name");
   });
 
   it("merges players", () => {
