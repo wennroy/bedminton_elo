@@ -109,7 +109,7 @@ export function loadRatingView(
       currentSegmentId: null,
       freshness: "fresh",
       nextBoundary: null,
-      view: loadLegacyStatsView(),
+      view: loadLegacyStatsView(conn),
     };
   }
 

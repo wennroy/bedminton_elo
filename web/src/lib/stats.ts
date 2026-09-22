@@ -1,3 +1,4 @@
+import type Database from "better-sqlite3";
 import {
   listPlayers,
   listMatchesByDate,
@@ -104,10 +105,10 @@ function toEloMatch(m: MatchWithNames): EloMatch {
   };
 }
 
-export function buildStatsData(): StatsData {
-  const players = listPlayers();
-  const matches = listMatchesByDate();
-  const ratings = recomputeAllRatings();
+export function buildStatsData(db?: Database.Database): StatsData {
+  const players = listPlayers(db);
+  const matches = listMatchesByDate(db);
+  const ratings = recomputeAllRatings(db);
 
   const eloResult = recomputeElos(matches.map(toEloMatch));
   const tsResult = recomputeTrueSkills(matches.map(toEloMatch));
@@ -126,9 +127,10 @@ export function buildStatsData(): StatsData {
 /**
  * Legacy 展示视图的薄封装：rating-view 的 legacy 分支直接复用旧语义，
  * 不复制逻辑；返回形状与 buildStatsData 完全一致（version="legacy"）。
+ * db 可注入以便与调用方共用同一连接；缺省走默认连接（生产同库）。
  */
-export function loadLegacyStatsView(): StatsData {
-  return buildStatsData();
+export function loadLegacyStatsView(db?: Database.Database): StatsData {
+  return buildStatsData(db);
 }
 
 export function leaderboardSummaries(

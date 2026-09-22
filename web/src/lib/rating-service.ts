@@ -98,8 +98,11 @@ function normalizeSnapshot(
  * 进程内 memo：同一连接、同一输入指纹 + 上海日期 + asOf 所属区段时
  * 不重复全历史重放。memo 只缓存成功结果，失败路径不落 memo，
  * 下一次调用会重试计算。跨连接（多进程/重启）由 meta 最近成功快照负责，
- * 且必须指纹一致才复用。
+ * 且必须指纹一致才复用。容量有界（LRU）：跨请求复用已由 meta 快照承担，
+ * memo 只为近邻请求去重，避免常驻进程按键累积完整 replay 对象。
  */
+const MEMO_KEY_LIMIT = 8;
+
 const snapshotMemo = new WeakMap<Database.Database, Map<string, RatingReplay>>();
 
 function memoFor(conn: Database.Database): Map<string, RatingReplay> {
@@ -111,6 +114,28 @@ function memoFor(conn: Database.Database): Map<string, RatingReplay> {
   return memo;
 }
 
+function memoGet(conn: Database.Database, key: string): RatingReplay | undefined {
+  const memo = memoFor(conn);
+  const hit = memo.get(key);
+  if (hit !== undefined) {
+    // LRU：命中提升为最新。
+    memo.delete(key);
+    memo.set(key, hit);
+  }
+  return hit;
+}
+
+function memoSet(conn: Database.Database, key: string, replay: RatingReplay): void {
+  const memo = memoFor(conn);
+  memo.delete(key);
+  memo.set(key, replay);
+  while (memo.size > MEMO_KEY_LIMIT) {
+    const oldest = memo.keys().next().value;
+    if (oldest === undefined) break;
+    memo.delete(oldest);
+  }
+}
+
 /**
  * 读取 Glicko-2 评分快照。asOf 由调用方一次捕获传入，服务内部不取时间。
  *
@@ -118,11 +143,11 @@ function memoFor(conn: Database.Database): Map<string, RatingReplay> {
  * - 无配置（未初始化）→ unavailable（不冒充 Legacy 结果）；
  * - 有配置即可重放，空历史返回 ready（引擎对空历史正常输出）；
  * - 成功 → ready，并原子写入最近成功快照（计算/序列化异常保留旧值）；
- * - 失败且存在「inputHash 与当前输入一致」的最近成功快照（同输入曾成功、
- *   本次重算失败，理论上罕见）→ 直接复用该快照 ready（其 replay.asOf
- *   如实反映旧时点）；
- * - 失败且缓存是旧输入的 → stale（lastGood 带旧 asOf，不得用于新预测）；
+ * - 失败且存在最近成功快照 → stale（lastGood 自带旧 asOf/旧输入指纹，
+ *   明确旧时点，不得用于新预测/优化，也不把旧结果冒充当前）；
  * - 失败且无缓存或缓存序列化损坏 → unavailable。
+ * 同输入同边界的失败对纯函数不会发生；同输入跨边界的失败说明旧快照
+ * 已经过期（跨段触发了新结算），同样只能报 stale。
  */
 export function loadGlickoSnapshot(
   db: Database.Database | undefined,
@@ -158,7 +183,7 @@ export function loadGlickoSnapshot(
   const segment: RatingSegment = ratingSegmentAt(asOf, config.firstSeasonStart);
 
   const key = `${inputHash}|${shanghaiDate}|${segment.id}`;
-  const memoized = memoFor(conn).get(key);
+  const memoized = memoGet(conn, key);
   if (memoized !== undefined) {
     return { state: "ready", model: "glicko2", inputHash, replay: memoized };
   }
@@ -168,7 +193,7 @@ export function loadGlickoSnapshot(
     cached !== undefined &&
     isCacheUsable(cached, inputHash, shanghaiDate, segment.id)
   ) {
-    memoFor(conn).set(key, cached.replay);
+    memoSet(conn, key, cached.replay);
     return { state: "ready", model: "glicko2", inputHash, replay: cached.replay };
   }
 
@@ -178,15 +203,13 @@ export function loadGlickoSnapshot(
       asOf,
     });
     writeLastGoodSnapshot(conn, configVersion, { inputHash, asOf, replay });
-    memoFor(conn).set(key, replay);
+    memoSet(conn, key, replay);
     return { state: "ready", model: "glicko2", inputHash, replay };
   } catch (error) {
     const reason = `replay failed: ${errorMessage(error)}`;
-    if (cached !== undefined && cached.inputHash === inputHash) {
-      // 同输入曾成功而本次重算失败（罕见，如同步代码变更）：直接复用旧
-      // 成功结果，其 replay.asOf 如实为旧时点。
-      return { state: "ready", model: "glicko2", inputHash, replay: cached.replay };
-    }
+    // 失败一律不得把旧结果冒充当前 ready：有最近成功快照即 stale
+    // （lastGood 自带旧 asOf，跨边界的同输入失败说明旧快照已过期），
+    // 无缓存即 unavailable。
     if (cached !== undefined) {
       return { state: "stale", model: "glicko2", reason, lastGood: cached.replay };
     }
