@@ -6,11 +6,19 @@ import {
   buildWeeklyStats,
   getWeekRange,
   weeklyDataVersion,
+  weeklyDataVersionContext,
+  WeeklyRatingUnavailableError,
   OG_DESIGN_VERSION,
   type FunMatch,
   type UpsetMatch,
   type WeeklyStats,
 } from "@/lib/weekly";
+import { readRatingConfig } from "@/lib/rating-config";
+import {
+  isValidLocalDate,
+  weekStart as ratingWeekStart,
+} from "@/lib/ratings/calendar";
+import type { RatingModel } from "@/lib/ratings/types";
 
 // Width-aware truncation: CJK/full-width chars count 2, ASCII counts 1,
 // so romanized names get roughly twice the character budget of Chinese names.
@@ -725,20 +733,46 @@ function WeeklyCard({
   );
 }
 
+/** 显式 "glicko2"|"legacy" 优先；非法值/缺省回 activeModel（无配置默认 legacy）。 */
+function resolveWeeklyModel(requested: string | null): RatingModel {
+  if (requested === "glicko2" || requested === "legacy") return requested;
+  return readRatingConfig()?.activeModel ?? "legacy";
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const week = url.searchParams.get("week");
   if (!week || !/^\d{4}-\d{2}-\d{2}$/.test(week)) {
     return NextResponse.json({ error: "Invalid week" }, { status: 400 });
   }
+  const ratingParam = url.searchParams.get("rating") ?? url.searchParams.get("model");
+  const asOfParam = url.searchParams.get("asOf");
 
   try {
-    const { weekStart } = getWeekRange(week);
-    const stats = buildWeeklyStats(weekStart);
+    const model = resolveWeeklyModel(ratingParam);
+    let stats: WeeklyStats;
+    if (model === "glicko2") {
+      if (!isValidLocalDate(week)) {
+        return NextResponse.json({ error: "Invalid week" }, { status: 400 });
+      }
+      // 新版周界以 ratings/calendar 为准（上海周一界），不用主机 TZ 数学。
+      const glickoWeekStart = ratingWeekStart(week);
+      stats = buildWeeklyStats(glickoWeekStart, {
+        rating: "glicko2",
+        asOf: asOfParam ?? undefined,
+      });
+    } else {
+      // legacy 默认路径：周界/数据/指纹与基线完全一致。
+      const { weekStart } = getWeekRange(week);
+      stats = buildWeeklyStats(weekStart);
+    }
     // 协商缓存:指纹不变 → 304 短路,跳过 QR 生成与 Satori 渲染。
+    // 指纹覆盖模型/参数版本/输入指纹/freshness/区段边界与图像可见数据；
+    // legacy 无 context，指纹公式与旧版逐位一致（旧缓存不因发版失效）。
     // no-cache = 允许存储但每次用前必须回源校验,取代 ImageResponse
     // 默认的 immutable 一年缓存(那正是数据更新后仍出旧图的根因)。
-    const etag = `"${weeklyDataVersion(stats)}-${OG_DESIGN_VERSION}"`;
+    const context = weeklyDataVersionContext(stats);
+    const etag = `"${weeklyDataVersion(stats, context)}-${OG_DESIGN_VERSION}"`;
     const cacheHeaders = { "Cache-Control": "no-cache", ETag: etag };
     if (request.headers.get("if-none-match") === etag) {
       return new Response(null, { status: 304, headers: cacheHeaders });
@@ -752,6 +786,13 @@ export async function GET(request: Request) {
       { width: 1080, height: 1920, headers: cacheHeaders }
     );
   } catch (error) {
+    if (error instanceof WeeklyRatingUnavailableError) {
+      // glicko2 评分不可用：明确拒答，不伪造胜率、不静默退回 legacy。
+      return NextResponse.json(
+        { error: error.message, reason: error.reason },
+        { status: 409 }
+      );
+    }
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
