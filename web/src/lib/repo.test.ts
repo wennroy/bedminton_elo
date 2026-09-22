@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import Database from "better-sqlite3";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -65,6 +65,34 @@ describe("repo", () => {
     const all = listMatchesByDate(db);
     expect(all).toHaveLength(1);
     expect(getMatch(id, db)).toMatchObject({ pa1Name: "A1", pb2Name: "B2", scoreA: 21 });
+  });
+
+  it("addMatch 复用统一验证：目录外球员/非法日期/非整数比分被拒绝", () => {
+    const db = mkDb();
+    const [a1, a2, b1, b2] = [
+      addPlayer("A1", db),
+      addPlayer("A2", db),
+      addPlayer("B1", db),
+      addPlayer("B2", db),
+    ];
+    // 存在性校验：目录外的 ID 不能写入。
+    expect(() =>
+      addMatch({ pa1: a1, pa2: a2, pb1: b1, pb2: 9999, scoreA: 21, scoreB: 18, playedAt: "2024-01-01" }, db)
+    ).toThrow("Unknown player id: 9999");
+    // 真实日历日期：2026-02-30 形式像日期但不存在。
+    expect(() =>
+      addMatch({ pa1: a1, pa2: a2, pb1: b1, pb2: b2, scoreA: 21, scoreB: 18, playedAt: "2026-02-30" }, db)
+    ).toThrow("valid YYYY-MM-DD calendar date");
+    // 非负整数比分：小数/负数拒绝；未来日期与超过 21 分合法。
+    expect(() =>
+      addMatch({ pa1: a1, pa2: a2, pb1: b1, pb2: b2, scoreA: 21.5, scoreB: 18, playedAt: "2024-01-01" }, db)
+    ).toThrow("non-negative integers");
+    expect(() =>
+      addMatch({ pa1: a1, pa2: a2, pb1: b1, pb2: b2, scoreA: 21, scoreB: -1, playedAt: "2024-01-01" }, db)
+    ).toThrow("non-negative integers");
+    const future = addMatch({ pa1: a1, pa2: a2, pb1: b1, pb2: b2, scoreA: 30, scoreB: 28, playedAt: "2999-01-01" }, db);
+    expect(getMatch(future, db)).toMatchObject({ scoreA: 30, playedAt: "2999-01-01" });
+    expect(listMatchesByDate(db)).toHaveLength(1);
   });
 
   it("recomputes ratings consistently with pure functions", () => {

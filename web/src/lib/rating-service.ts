@@ -28,6 +28,13 @@ export type RatingServiceResult =
 /** 最近成功快照的 meta 键前缀；完整键再拼接配置版本。 */
 export const RATING_LAST_GOOD_KEY_PREFIX = "ratings.last-good.v1:";
 
+/**
+ * 「未初始化新版配置」的 unavailable 原因常量。比赛写入层据此区分：
+ * 配置从未初始化 → 该记录不产生新版计分事件（not_effective）；
+ * 计算失败 → 比赛已保存、积分稍后更新（pending）。
+ */
+export const RATING_CONFIG_MISSING_REASON = "rating config not initialized";
+
 export function ratingLastGoodKey(configVersion: string): string {
   return `${RATING_LAST_GOOD_KEY_PREFIX}${configVersion}`;
 }
@@ -136,7 +143,7 @@ export function loadGlickoSnapshot(
     return {
       state: "unavailable",
       model: "glicko2",
-      reason: "rating config not initialized",
+      reason: RATING_CONFIG_MISSING_REASON,
     };
   }
 

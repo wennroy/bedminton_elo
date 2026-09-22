@@ -8,6 +8,17 @@ import {
   recomputeAllRatings,
   type PlayerRatings,
 } from "@/lib/repo";
+import {
+  assertValidMatchInput,
+  MatchValidationError,
+  type MatchValidationInput,
+} from "@/lib/match-validation";
+import {
+  loadGlickoSnapshot,
+  RATING_CONFIG_MISSING_REASON,
+} from "@/lib/rating-service";
+import { shanghaiLocalDateFromInstant } from "@/lib/ratings/calendar";
+import type { MatchEstimate } from "@/lib/ratings/types";
 
 const TEN_MINUTES = 10 * 60 * 1000;
 
@@ -24,20 +35,26 @@ export async function GET() {
   }
 }
 
-interface PostBody {
-  pa1: number;
-  pa2: number;
-  pb1: number;
-  pb2: number;
-  scoreA: number;
-  scoreB: number;
-  playedAt: string;
+interface PostBody extends MatchValidationInput {
   enteredBy?: number | null;
 }
 
-function isValidDateString(value: unknown): value is string {
-  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
-}
+/** POST 响应中的新版评分判别字段（共享契约：ready/pending/not_effective）。 */
+export type MatchRatingField =
+  | {
+      state: "ready";
+      model: "glicko2";
+      configVersion: string;
+      /** 本次请求捕获的评分时点，贯穿整场评分。 */
+      asOf: string;
+      segmentId: string;
+      /** 该 matchId 自身的单场变化（补录导致的下游当前分变化不冒充该场变化）。 */
+      estimate: MatchEstimate;
+      /** 该场落在历史区段、触发下游重算（estimate.segmentId !== 当前区段）。 */
+      historyRecomputed: boolean;
+    }
+  | { state: "pending"; model: "glicko2"; reason: string }
+  | { state: "not_effective"; model: "glicko2"; reason: string };
 
 function parsePostBody(body: Record<string, unknown>): PostBody | null {
   const pa1 = Number(body.pa1);
@@ -54,7 +71,7 @@ function parsePostBody(body: Record<string, unknown>): PostBody | null {
 
   if (
     [pa1, pa2, pb1, pb2, scoreA, scoreB].some((n) => !Number.isFinite(n)) ||
-    !isValidDateString(playedAt) ||
+    typeof playedAt !== "string" ||
     (enteredBy !== null && !Number.isFinite(enteredBy))
   ) {
     return null;
@@ -79,6 +96,73 @@ function ratingsForPlayers(
   }));
 }
 
+/**
+ * 写入成功后的新版评分判别：
+ * - ready：服务 ready 且重放含该 matchId 的单场事件；
+ * - not_effective：ready 但无该场事件（未来日期未生效），或新版配置未初始化；
+ * - pending：服务失败（unavailable 计算失败 / stale），比赛已保存、积分稍后更新。
+ */
+function buildRatingField(
+  db: ReturnType<typeof getDb>,
+  asOf: string,
+  matchId: number,
+  playedAt: string
+): MatchRatingField {
+  let result;
+  try {
+    result = loadGlickoSnapshot(db, asOf);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return {
+      state: "pending",
+      model: "glicko2",
+      reason: `rating service failed: ${message}`,
+    };
+  }
+
+  if (result.state === "ready") {
+    const estimate = result.replay.matchEstimates[String(matchId)];
+    if (estimate === undefined) {
+      const asOfDate = shanghaiLocalDateFromInstant(asOf);
+      return {
+        state: "not_effective",
+        model: "glicko2",
+        reason:
+          playedAt > asOfDate
+            ? `match date ${playedAt} is after as-of date ${asOfDate}; not yet effective`
+            : "match did not produce a glicko2 rating event",
+      };
+    }
+    return {
+      state: "ready",
+      model: "glicko2",
+      configVersion: result.replay.configVersion,
+      asOf,
+      segmentId: estimate.segmentId,
+      estimate,
+      historyRecomputed:
+        estimate.segmentId !== result.replay.currentSegment.id,
+    };
+  }
+
+  if (result.state === "stale") {
+    return {
+      state: "pending",
+      model: "glicko2",
+      reason: `rating service stale: ${result.reason}`,
+    };
+  }
+
+  if (result.reason === RATING_CONFIG_MISSING_REASON) {
+    return {
+      state: "not_effective",
+      model: "glicko2",
+      reason: RATING_CONFIG_MISSING_REASON,
+    };
+  }
+  return { state: "pending", model: "glicko2", reason: result.reason };
+}
+
 export async function POST(request: Request) {
   let body: Record<string, unknown>;
   try {
@@ -93,30 +177,47 @@ export async function POST(request: Request) {
   }
 
   const ids = [input.pa1, input.pa2, input.pb1, input.pb2];
-  if (new Set(ids).size !== 4) {
-    return NextResponse.json(
-      { error: "Four players must be distinct" },
-      { status: 400 }
-    );
-  }
-  if (input.scoreA === input.scoreB) {
-    return NextResponse.json(
-      { error: "Scores must not be equal" },
-      { status: 400 }
-    );
-  }
-  if (input.scoreA < 0 || input.scoreB < 0) {
-    return NextResponse.json(
-      { error: "Scores must be non-negative" },
-      { status: 400 }
-    );
+
+  let db: ReturnType<typeof getDb>;
+  try {
+    db = getDb();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 
+  // 验证（含球员目录存在性）：只有验证失败才返回 4xx。
   try {
-    const db = getDb();
-    const names = buildPlayerMap(db);
-    const before = recomputeAllRatings(db);
-    const id = addMatch(
+    const knownIds = new Set(listPlayers(db).map((p) => p.id));
+    assertValidMatchInput(input, knownIds);
+  } catch (error) {
+    if (error instanceof MatchValidationError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+
+  // asOf 在入口捕获一次，贯穿本次评分。
+  const asOf = new Date().toISOString();
+
+  // Legacy before/after 是可失败的附加计算：不参加写入事务、不阻止写入。
+  let names: Map<number, string> = new Map();
+  let before: ReturnType<typeof ratingsForPlayers> = [];
+  let after: ReturnType<typeof ratingsForPlayers> = [];
+  let legacyRatingsAvailable = true;
+  try {
+    names = buildPlayerMap(db);
+    before = ratingsForPlayers(recomputeAllRatings(db), names, ids);
+  } catch {
+    before = [];
+    legacyRatingsAvailable = false;
+  }
+
+  // 数据库写入失败 → 5xx（已成功写入绝不在此后退回错误响应）。
+  let id: number;
+  try {
+    id = addMatch(
       {
         pa1: input.pa1,
         pa2: input.pa2,
@@ -129,21 +230,31 @@ export async function POST(request: Request) {
       },
       db
     );
-    const after = recomputeAllRatings(db);
-    revalidatePath("/");
-
-    return NextResponse.json(
-      {
-        id,
-        before: ratingsForPlayers(before, names, ids),
-        after: ratingsForPlayers(after, names, ids),
-      },
-      { status: 201 }
-    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: message }, { status: 400 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
+
+  try {
+    after = ratingsForPlayers(recomputeAllRatings(db), names, ids);
+  } catch {
+    after = [];
+    legacyRatingsAvailable = false;
+  }
+
+  const rating = buildRatingField(db, asOf, id, input.playedAt);
+  revalidatePath("/");
+
+  return NextResponse.json(
+    {
+      id,
+      before,
+      after,
+      legacyRatingsAvailable,
+      rating,
+    },
+    { status: 201 }
+  );
 }
 
 export async function DELETE(request: Request) {
