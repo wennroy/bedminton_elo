@@ -1,13 +1,20 @@
 import { describe, expect, it } from "vitest";
+import { tmpdir } from "os";
+import { join } from "path";
+import { unlinkSync } from "fs";
 import {
+  buildStatsData,
   headToHead,
   leaderboardSummaries,
+  loadLegacyStatsView,
   playerFunStats,
   playerMatches,
   playerRelations,
   playerSummary,
   type StatsData,
 } from "./stats";
+import { closeDb, getDb } from "./db";
+import { addMatch, addPlayer } from "./repo";
 
 const players = [
   { id: 1, name: "Alice", createdAt: "2024-01-01T00:00:00Z" },
@@ -366,5 +373,44 @@ describe("playerRelations", () => {
     const { partners, opponents } = playerRelations(999, funData);
     expect(partners).toHaveLength(0);
     expect(opponents).toHaveLength(0);
+  });
+});
+
+describe("loadLegacyStatsView（rating-view legacy 分支的薄封装）", () => {
+  it("返回与 buildStatsData 完全一致的旧语义视图，不复制逻辑", () => {
+    closeDb();
+    const dbPath = join(tmpdir(), `legacy-view-${Date.now()}.db`);
+    process.env.DATABASE_URL = dbPath;
+    try {
+      const [a, b, c, d] = [
+        addPlayer("A"),
+        addPlayer("B"),
+        addPlayer("C"),
+        addPlayer("D"),
+      ];
+      addMatch(
+        { pa1: a, pa2: b, pb1: c, pb2: d, scoreA: 21, scoreB: 15, playedAt: "2024-01-01" },
+        getDb()
+      );
+
+      const view = loadLegacyStatsView();
+      // 旧 stats 形状：players/matches/ratings(Map)/eloHistory/tsPlayers。
+      expect(view.players.map((p) => p.name)).toEqual(["A", "B", "C", "D"]);
+      expect(view.matches).toHaveLength(1);
+      expect(view.ratings).toBeInstanceOf(Map);
+      expect(view.ratings.get(a)).toMatchObject({ elo: expect.any(Number) });
+      expect(view.eloHistory.length).toBeGreaterThan(0);
+      expect(view.tsPlayers[String(a)]).toBeDefined();
+      // 薄封装：与直接 buildStatsData 逐项一致。
+      expect(view).toEqual(buildStatsData());
+    } finally {
+      closeDb();
+      delete process.env.DATABASE_URL;
+      try {
+        unlinkSync(dbPath);
+      } catch {
+        // ignore
+      }
+    }
   });
 });

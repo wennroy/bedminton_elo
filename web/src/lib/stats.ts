@@ -123,6 +123,14 @@ export function buildStatsData(): StatsData {
   return { players, matches, ratings, eloHistory, tsPlayers: tsResult.players };
 }
 
+/**
+ * Legacy 展示视图的薄封装：rating-view 的 legacy 分支直接复用旧语义，
+ * 不复制逻辑；返回形状与 buildStatsData 完全一致（version="legacy"）。
+ */
+export function loadLegacyStatsView(): StatsData {
+  return buildStatsData();
+}
+
 export function leaderboardSummaries(
   data: StatsData,
   weekStart: string
