@@ -1,5 +1,6 @@
 import type Database from "better-sqlite3";
 import { getDb } from "./db";
+import { assertValidMatchInput } from "./match-validation";
 import { recomputeElos, INITIAL_RATING, type Match as EloMatch } from "./elo";
 import {
   recomputeTrueSkills,
@@ -128,14 +129,9 @@ export interface AddMatchInput {
 }
 
 export function addMatch(input: AddMatchInput, db?: Database.Database): number {
-  const ids = [input.pa1, input.pa2, input.pb1, input.pb2];
-  if (new Set(ids).size !== 4) {
-    throw new Error("Four players must be distinct");
-  }
-  if (input.scoreA === input.scoreB) {
-    throw new Error("Scores must not be equal");
-  }
   const conn = resolveDb(db);
+  // 与 POST /api/matches 共用同一套验证（存在性校验注入当前目录）。
+  assertValidMatchInput(input, knownPlayerIdSet(conn));
   const result = conn
     .prepare(
       `INSERT INTO matches (pa1, pa2, pb1, pb2, score_a, score_b, played_at, entered_by)
@@ -152,6 +148,12 @@ export function addMatch(input: AddMatchInput, db?: Database.Database): number {
       input.enteredBy ?? null
     );
   return Number(result.lastInsertRowid);
+}
+
+/** 当前球员目录 ID 集合，供比赛写入的存在性校验注入。 */
+function knownPlayerIdSet(conn: Database.Database): Set<number> {
+  const rows = conn.prepare(`SELECT id FROM players`).all() as Array<{ id: number }>;
+  return new Set(rows.map((row) => row.id));
 }
 
 export function getMatch(id: number, db?: Database.Database): MatchWithNames | undefined {
