@@ -33,6 +33,44 @@ export interface MatchWithNames extends Match {
   pb2Name: string;
 }
 
+/**
+ * 原始比赛行（不含姓名 JOIN）。评分输入必须用这份查询：
+ * 现有 listMatchesByDate 的姓名 INNER JOIN 会静默丢掉引用已删球员的
+ * 比赛，导致重放漏事实；此处按 played_at/created_at/id 升序返回全部记录。
+ */
+export interface RawMatch {
+  id: number;
+  pa1: number;
+  pa2: number;
+  pb1: number;
+  pb2: number;
+  scoreA: number;
+  scoreB: number;
+  playedAt: string;
+  createdAt: string;
+}
+
+export function listRawMatches(db?: Database.Database): RawMatch[] {
+  const conn = resolveDb(db);
+  const rows = conn
+    .prepare(
+      `SELECT
+        m.id,
+        m.pa1,
+        m.pa2,
+        m.pb1,
+        m.pb2,
+        m.score_a AS scoreA,
+        m.score_b AS scoreB,
+        m.played_at AS playedAt,
+        m.created_at AS createdAt
+      FROM matches m
+      ORDER BY m.played_at, m.created_at, m.id`
+    )
+    .all() as RawMatch[];
+  return rows;
+}
+
 export interface PlayerRatings {
   elo: number;
   mu: number;
