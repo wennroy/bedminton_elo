@@ -35,6 +35,27 @@ export class MatchValidationError extends Error {
 }
 
 /**
+ * 比分规则：非负整数且不相等。POST 录入与 admin 改分共用同一 helper，
+ * 保证「录入拒绝的比分」与「改分接受的比分」完全一致。
+ */
+export function assertValidScores(scoreA: number, scoreB: number): void {
+  if (
+    !Number.isSafeInteger(scoreA) ||
+    scoreA < 0 ||
+    !Number.isSafeInteger(scoreB) ||
+    scoreB < 0
+  ) {
+    throw new MatchValidationError(
+      "invalid_score",
+      "Scores must be non-negative integers"
+    );
+  }
+  if (scoreA === scoreB) {
+    throw new MatchValidationError("invalid_score", "Scores must not be equal");
+  }
+}
+
+/**
  * 校验四个互不相同且存在于球员目录的整数 ID、真实日历日期
  * （ratings/calendar 的 isValidLocalDate，2026-02-30 这类日期拒绝）、
  * 非负整数且不相等的比分。存在性校验由调用方注入球员目录集合。
@@ -72,18 +93,5 @@ export function assertValidMatchInput(
       "playedAt must be a valid YYYY-MM-DD calendar date"
     );
   }
-  if (
-    !Number.isSafeInteger(input.scoreA) ||
-    input.scoreA < 0 ||
-    !Number.isSafeInteger(input.scoreB) ||
-    input.scoreB < 0
-  ) {
-    throw new MatchValidationError(
-      "invalid_score",
-      "Scores must be non-negative integers"
-    );
-  }
-  if (input.scoreA === input.scoreB) {
-    throw new MatchValidationError("invalid_score", "Scores must not be equal");
-  }
+  assertValidScores(input.scoreA, input.scoreB);
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { revalidatePath } from "next/cache";
 import { getDb } from "@/lib/db";
+import { revalidateRatingPages } from "@/lib/rating-revalidation";
 
 const TEN_MINUTES = 10 * 60 * 1000;
 
@@ -35,7 +35,7 @@ export async function DELETE(
     }
 
     db.prepare("DELETE FROM matches WHERE id = ?").run(id);
-    revalidatePath("/");
+    revalidateRatingPages();
     return NextResponse.json({ success: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
