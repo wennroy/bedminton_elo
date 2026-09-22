@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { revalidatePath } from "next/cache";
 import { getDb } from "@/lib/db";
 import {
   addMatch,
@@ -17,6 +16,7 @@ import {
   loadGlickoSnapshot,
   RATING_CONFIG_MISSING_REASON,
 } from "@/lib/rating-service";
+import { revalidateRatingPages } from "@/lib/rating-revalidation";
 import { shanghaiLocalDateFromInstant } from "@/lib/ratings/calendar";
 import type { MatchEstimate } from "@/lib/ratings/types";
 
@@ -243,7 +243,7 @@ export async function POST(request: Request) {
   }
 
   const rating = buildRatingField(db, asOf, id, input.playedAt);
-  revalidatePath("/");
+  revalidateRatingPages();
 
   return NextResponse.json(
     {
@@ -286,7 +286,7 @@ export async function DELETE(request: Request) {
     }
 
     db.prepare("DELETE FROM matches WHERE id = ?").run(id);
-    revalidatePath("/");
+    revalidateRatingPages();
     return NextResponse.json({ success: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";

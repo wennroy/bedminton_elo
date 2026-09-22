@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { revalidatePath } from "next/cache";
 import { getDb } from "@/lib/db";
 import { isAdminKey } from "@/lib/admin";
 import { renamePlayer } from "@/lib/repo";
+import { revalidateRatingPages } from "@/lib/rating-revalidation";
 
 export async function POST(
   request: Request,
@@ -34,7 +34,7 @@ export async function POST(
   try {
     const db = getDb();
     renamePlayer(id, name, db);
-    revalidatePath("/");
+    revalidateRatingPages();
     return NextResponse.json({ success: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { revalidatePath } from "next/cache";
 import { getDb } from "@/lib/db";
 import { isAdminKey } from "@/lib/admin";
+import { revalidateRatingPages } from "@/lib/rating-revalidation";
 
 export async function DELETE(
   request: Request,
@@ -34,7 +34,7 @@ export async function DELETE(
     }
 
     db.prepare(`DELETE FROM players WHERE id = ?`).run(id);
-    revalidatePath("/");
+    revalidateRatingPages();
     return NextResponse.json({ success: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";

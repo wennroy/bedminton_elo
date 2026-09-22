@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
-import { revalidatePath } from "next/cache";
 import { getDb } from "@/lib/db";
 import { isAdminKey } from "@/lib/admin";
 import { getMatch } from "@/lib/repo";
+import {
+  assertValidScores,
+  MatchValidationError,
+} from "@/lib/match-validation";
+import { revalidateRatingPages } from "@/lib/rating-revalidation";
 
 export async function PATCH(
   request: Request,
@@ -28,21 +32,20 @@ export async function PATCH(
 
   const scoreA = Number(body.scoreA);
   const scoreB = Number(body.scoreB);
-  if (
-    [scoreA, scoreB].some((n) => !Number.isFinite(n)) ||
-    scoreA < 0 ||
-    scoreB < 0
-  ) {
+  if ([scoreA, scoreB].some((n) => !Number.isFinite(n))) {
     return NextResponse.json(
-      { error: "Scores must be non-negative numbers" },
+      { error: "Scores must be non-negative integers" },
       { status: 400 }
     );
   }
-  if (scoreA === scoreB) {
-    return NextResponse.json(
-      { error: "Scores must not be equal" },
-      { status: 400 }
-    );
+  // 与比赛录入共用同一套整数比分规则（非负整数且不相等）。
+  try {
+    assertValidScores(scoreA, scoreB);
+  } catch (error) {
+    if (error instanceof MatchValidationError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    throw error;
   }
 
   try {
@@ -55,7 +58,7 @@ export async function PATCH(
     db.prepare(
       `UPDATE matches SET score_a = ?, score_b = ? WHERE id = ?`
     ).run(scoreA, scoreB, id);
-    revalidatePath("/");
+    revalidateRatingPages();
     return NextResponse.json({ success: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
