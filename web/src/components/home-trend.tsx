@@ -15,6 +15,15 @@ import { ArrowRight, Check } from "lucide-react";
 import type { EloHistoryPoint } from "@/lib/stats";
 import { INITIAL_RATING } from "@/lib/elo";
 import { getMyPlayerId } from "@/lib/identity";
+import type { LocalDate } from "@/lib/ratings/types";
+import type { RatingView } from "@/lib/ratings/view-types";
+import {
+  buildTrendRows,
+  displayRankRows,
+  displayRatingRows,
+  formatTrendSeasonLabel,
+  listTrendSeasons,
+} from "@/lib/ratings/chart-data";
 import { cn } from "@/lib/utils";
 
 interface PlayerLite {
@@ -22,13 +31,30 @@ interface PlayerLite {
   name: string;
 }
 
-interface HomeTrendProps {
-  history: EloHistoryPoint[];
-  /** 全部球员（含尚无比赛者）；chips 与排名按 id 升序固定颜色 */
-  players: PlayerLite[];
-  /** compact = 首页嵌入（带「展开大图」链接）；full = /trends 大图页 */
-  variant?: "compact" | "full";
-}
+/**
+ * Legacy：history/players 旧口径渲染逐比特不动。
+ * glicko2：消费服务端投影 view（points + weekSegments），正式周节点实线、
+ * 当前区段预估虚线、季重置/周校准独立 tooltip；同日不同事件不折叠。
+ */
+export type HomeTrendProps =
+  | {
+      model: "legacy";
+      history: EloHistoryPoint[];
+      /** 全部球员（含尚无比赛者）；chips 与排名按 id 升序固定颜色 */
+      players: PlayerLite[];
+      /** compact = 首页嵌入（带「展开大图」链接）；full = /trends 大图页 */
+      variant?: "compact" | "full";
+      /** 档案/大图链接保留评分模式，如 "?rating=glicko2"；Legacy 不需要。 */
+      ratingQuery?: string;
+    }
+  | {
+      model: "glicko2";
+      view: RatingView;
+      currentSegmentId: string;
+      currentSeason: LocalDate | null;
+      variant?: "compact" | "full";
+      ratingQuery?: string;
+    };
 
 type RangeKey = "4" | "12" | "all";
 type Mode = "elo" | "rank";
@@ -41,6 +67,12 @@ const RANGES: { key: RangeKey; label: string; weeks: number | null }[] = [
 
 const MODES: { key: Mode; label: string }[] = [
   { key: "elo", label: "ELO 积分" },
+  { key: "rank", label: "排名" },
+];
+
+/** 新版模式选项：积分口径沿用 elo key，展示文案换「评分」。 */
+const Glicko2_MODES: { key: Mode; label: string }[] = [
+  { key: "elo", label: "评分" },
   { key: "rank", label: "排名" },
 ];
 
@@ -103,11 +135,26 @@ function Segmented<T extends string>({
   );
 }
 
-export function HomeTrend({
+export function HomeTrend(props: HomeTrendProps) {
+  if (props.model === "glicko2") return <Glicko2Trend {...props} />;
+  return <LegacyTrend {...props} />;
+}
+
+// ---------------------------------------------------------------------------
+// Legacy：旧口径渲染路径保持不动。
+// ---------------------------------------------------------------------------
+
+function LegacyTrend({
   history,
   players,
   variant = "full",
-}: HomeTrendProps) {
+  ratingQuery = "",
+}: {
+  history: EloHistoryPoint[];
+  players: PlayerLite[];
+  variant?: "compact" | "full";
+  ratingQuery?: string;
+}) {
   const compact = variant === "compact";
   const [range, setRange] = React.useState<RangeKey>("12");
   const [mode, setMode] = React.useState<Mode>("elo");
@@ -253,7 +300,7 @@ export function HomeTrend({
         </div>
         {compact ? (
           <Link
-            href="/trends"
+            href={`/trends${ratingQuery}`}
             className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-win"
           >
             展开大图
@@ -406,7 +453,7 @@ export function HomeTrend({
               {readoutRows.map(({ player, rank, elo }) => (
                 <Link
                   key={player.id}
-                  href={`/players/${player.id}`}
+                  href={`/players/${player.id}${ratingQuery}`}
                   className="flex items-center gap-[7px] py-[7px] text-[11px] transition-colors hover:text-win"
                 >
                   <span className="min-w-[13px] font-num text-[10px] text-muted-foreground">
@@ -439,6 +486,554 @@ export function HomeTrend({
       <div className="mt-[17px] flex justify-between gap-3 text-[10px] text-muted-foreground max-[760px]:mt-4 max-[760px]:text-[9px]">
         <span>点击日期查看当日排名与积分</span>
         <span className="max-[760px]:hidden">颜色与球员固定对应</span>
+      </div>
+
+      <div className="mt-[19px] border-t border-border pt-[13px] max-[760px]:mt-4 max-[760px]:pt-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-[11px] font-medium text-muted-foreground">
+            选择成员
+          </h3>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() =>
+                setSelected(new Set(sortedPlayers.map((p) => p.id)))
+              }
+              className="text-[10px] text-muted-foreground transition-colors hover:text-win"
+            >
+              全选
+            </button>
+            <button
+              type="button"
+              disabled={myId === null}
+              onClick={() => myId !== null && setSelected(new Set([myId]))}
+              className="text-[10px] text-muted-foreground transition-colors hover:text-win disabled:opacity-40"
+            >
+              只看自己
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelected(new Set())}
+              className="text-[10px] text-muted-foreground transition-colors hover:text-win"
+            >
+              清空
+            </button>
+          </div>
+        </div>
+        <div className="mt-2.5 flex flex-wrap gap-2 max-[760px]:grid max-[760px]:grid-cols-3 max-[760px]:gap-[7px]">
+          {sortedPlayers.map((p) => {
+            const isSelected = selected.has(p.id);
+            return (
+              <button
+                key={p.id}
+                type="button"
+                aria-pressed={isSelected}
+                onClick={() => togglePlayer(p.id)}
+                className={cn(
+                  "inline-flex min-h-9 items-center gap-2 rounded-[7px] border border-border px-3 py-[7px] text-[11px] transition-colors max-[760px]:min-h-[38px] max-[760px]:gap-1.5 max-[760px]:px-2 max-[760px]:text-[10px]",
+                  isSelected
+                    ? "bg-secondary text-foreground"
+                    : "text-muted-foreground"
+                )}
+              >
+                <span
+                  className="size-[7px] shrink-0 rounded-full max-[760px]:size-1.5"
+                  style={{
+                    background: isSelected
+                      ? seriesVar(colorIndexOf.get(p.id) ?? 0)
+                      : "var(--muted-foreground)",
+                    opacity: isSelected ? 1 : 0.4,
+                  }}
+                />
+                <span className="truncate">
+                  {p.name}
+                  {p.id === myId && (
+                    <small className="ml-1 text-[9px] max-[760px]:text-[8px]">
+                      我
+                    </small>
+                  )}
+                </span>
+                <Check
+                  className={cn(
+                    "size-[13px] shrink-0 max-[760px]:ml-auto max-[760px]:size-[11px]",
+                    isSelected ? "opacity-100" : "opacity-0"
+                  )}
+                  strokeWidth={2}
+                />
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// glicko2：正式周节点实线 + 当前区段预估虚线 + 季重置/周校准独立 tooltip。
+// ---------------------------------------------------------------------------
+
+type SeasonKey = "current" | "all" | LocalDate;
+
+/** 校准/重置事件的独立 tooltip：只在这些事件上渲染，不随线变色。 */
+function TrendEventTooltip({
+  active,
+  rowKey,
+  rowsByKey,
+  selectedIds,
+  nameOf,
+}: {
+  active?: boolean;
+  rowKey?: string | number;
+  rowsByKey: ReadonlyMap<string, { kind: string; correction: Record<number, number>; resetDeltas: Record<number, number> }>;
+  selectedIds: readonly number[];
+  nameOf: (id: number) => string;
+}) {
+  const row = rowKey !== undefined ? rowsByKey.get(String(rowKey)) : undefined;
+  if (!active || !row) return null;
+
+  const deltaClass = (delta: number) =>
+    cn(
+      "font-num",
+      delta > 0 ? "text-win" : delta < 0 ? "text-loss" : "text-muted-foreground"
+    );
+  const formatDelta = (delta: number) => (delta > 0 ? `+${delta}` : `${delta}`);
+
+  if (row.kind === "weekly_final") {
+    const entries = selectedIds
+      .map((id) => [id, row.correction[id]] as const)
+      .filter(([, delta]) => delta !== undefined);
+    if (entries.length === 0) return null;
+    return (
+      <div className="rounded-lg border border-border bg-card px-3 py-2 text-[11px] shadow-md">
+        <div className="mb-1 font-bold text-card-foreground">周正式结算 · 校准</div>
+        {entries.map(([id, delta]) => (
+          <div key={id} className="flex items-center justify-between gap-4">
+            <span className="text-muted-foreground">{nameOf(id)}</span>
+            <span className={deltaClass(delta)}>{formatDelta(delta)}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  if (row.kind === "season_reset") {
+    const entries = selectedIds
+      .map((id) => [id, row.resetDeltas[id]] as const)
+      .filter(([, delta]) => delta !== undefined);
+    if (entries.length === 0) return null;
+    return (
+      <div className="rounded-lg border border-border bg-card px-3 py-2 text-[11px] shadow-md">
+        <div className="mb-1 font-bold text-card-foreground">赛季重置 · 软回中</div>
+        {entries.map(([id, delta]) => (
+          <div key={id} className="flex items-center justify-between gap-4">
+            <span className="text-muted-foreground">{nameOf(id)}</span>
+            <span className={deltaClass(delta)}>{formatDelta(delta)}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  return null;
+}
+
+function Glicko2Trend({
+  view,
+  currentSegmentId,
+  currentSeason,
+  variant = "full",
+  ratingQuery = "",
+}: {
+  view: RatingView;
+  currentSegmentId: string;
+  currentSeason: LocalDate | null;
+  variant?: "compact" | "full";
+  ratingQuery?: string;
+}) {
+  const compact = variant === "compact";
+  const [mode, setMode] = React.useState<Mode>("elo");
+  const [seasonKey, setSeasonKey] = React.useState<SeasonKey>("current");
+  const [inspectedKey, setInspectedKey] = React.useState<string | null>(null);
+  const [myId, setMyId] = React.useState<number | null>(null);
+
+  const sortedPlayers = React.useMemo(
+    () =>
+      view.players
+        .map((p) => ({ id: p.playerId, name: p.name }))
+        .sort((a, b) => a.id - b.id),
+    [view.players]
+  );
+  const colorIndexOf = React.useMemo(
+    () => new Map(sortedPlayers.map((p, i) => [p.id, i])),
+    [sortedPlayers]
+  );
+  const nameOf = React.useCallback(
+    (id: number) => sortedPlayers.find((p) => p.id === id)?.name ?? String(id),
+    [sortedPlayers]
+  );
+
+  const [selected, setSelected] = React.useState<ReadonlySet<number>>(
+    () => new Set(sortedPlayers.map((p) => p.id))
+  );
+
+  React.useEffect(() => {
+    setMyId(getMyPlayerId());
+  }, []);
+
+  // 季度选择：当前季度 / 各历史季度 / 全部历史（按 points[].season 过滤）
+  const seasonOptions = React.useMemo(
+    () => [
+      { key: "current" as SeasonKey, label: "当前季度" },
+      ...listTrendSeasons(view.points).map((season) => ({
+        key: season as SeasonKey,
+        label: formatTrendSeasonLabel(season),
+      })),
+      { key: "all" as SeasonKey, label: "全部历史" },
+    ],
+    [view.points]
+  );
+
+  const seasonFilter =
+    seasonKey === "current" ? currentSeason : seasonKey === "all" ? undefined : seasonKey;
+
+  const rows = React.useMemo(
+    () => buildTrendRows(view.points, view.weekSegments, { season: seasonFilter }),
+    [view.points, view.weekSegments, seasonFilter]
+  );
+
+  const ratingRows = React.useMemo(() => displayRatingRows(rows), [rows]);
+  const rankRows = React.useMemo(() => displayRankRows(rows), [rows]);
+  const displayRows = mode === "rank" ? rankRows : ratingRows;
+
+  // 当前区段的逐场预估行（虚线只画这些行上有实际参赛的点）
+  const estimatedKeys = React.useMemo(
+    () =>
+      new Set(
+        rows
+          .filter(
+            (row) =>
+              row.kind === "match_estimated" && row.segment === currentSegmentId
+          )
+          .map((row) => row.key)
+      ),
+    [rows, currentSegmentId]
+  );
+
+  const rowByKey = React.useMemo(
+    () => new Map(rows.map((row) => [row.key, row])),
+    [rows]
+  );
+
+  // Recharts 行：key = 事件 ID（同刻两事件不合并）；`:est` 为当前周预估虚线值
+  const chartData = React.useMemo(
+    () =>
+      displayRows.map((row) => {
+        const obj: Record<string, number | string> = {
+          key: row.key,
+          kind: row.kind,
+          label: shortDate(row.at.slice(0, 10)),
+        };
+        for (const [playerId, value] of Object.entries(row.values)) {
+          obj[playerId] = value;
+        }
+        if (estimatedKeys.has(row.key)) {
+          for (const playerId of Object.keys(row.r)) {
+            const value = row.values[Number(playerId)];
+            if (value !== undefined) obj[`${playerId}:est`] = value;
+          }
+        }
+        return obj;
+      }),
+    [displayRows, estimatedKeys]
+  );
+
+  const maxRank = React.useMemo(
+    () =>
+      Math.max(
+        1,
+        ...rankRows.flatMap((row) => Object.values(row.values))
+      ),
+    [rankRows]
+  );
+
+  const inspected =
+    inspectedKey && rowByKey.has(inspectedKey)
+      ? inspectedKey
+      : rows[rows.length - 1]?.key;
+  const inspectedRow = inspected ? rowByKey.get(inspected) : undefined;
+
+  const selectedPlayers = React.useMemo(
+    () => sortedPlayers.filter((p) => selected.has(p.id)),
+    [sortedPlayers, selected]
+  );
+
+  // 读数栏：该事件时点的并列名次 + 展示分（缺席者沿用最近分值，与线一致）
+  const readoutRows = React.useMemo(() => {
+    if (!inspectedRow) return [];
+    const ratingRow = ratingRows.find((row) => row.key === inspectedRow.key);
+    const rankRow = rankRows.find((row) => row.key === inspectedRow.key);
+    return selectedPlayers
+      .map((player) => ({
+        player,
+        rank: rankRow?.values[player.id],
+        rating: ratingRow?.values[player.id],
+      }))
+      .filter((row) => row.rating !== undefined)
+      .sort(
+        (a, b) =>
+          (a.rank ?? Number.POSITIVE_INFINITY) -
+          (b.rank ?? Number.POSITIVE_INFINITY)
+      );
+  }, [inspectedRow, ratingRows, rankRows, selectedPlayers]);
+
+  function togglePlayer(id: number) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const pillClass =
+    "inline-flex items-center rounded-[5px] px-[7px] py-1 text-[10px] font-bold bg-secondary text-muted-foreground";
+  const historical = seasonKey !== "current";
+
+  return (
+    <section className="rounded-2xl border border-border bg-card p-[19px] min-[761px]:p-[25px]">
+      <div className="mb-5 flex items-center justify-between gap-3.5 max-[760px]:mb-4">
+        <div>
+          <h2 className="text-lg font-bold text-card-foreground max-[760px]:text-[15px]">
+            {compact ? "全员评分趋势" : "积分与排名"}
+          </h2>
+          <p className="mt-[5px] text-[10px] text-muted-foreground">
+            {sortedPlayers.length} 位成员 · {selected.size} 位已选
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {historical && <span className={pillClass}>历史回放</span>}
+          {compact ? (
+            <Link
+              href={`/trends${ratingQuery}`}
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-win"
+            >
+              展开大图
+              <ArrowRight className="size-[15px]" strokeWidth={1.65} />
+            </Link>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2.5 pb-6 max-[760px]:pb-4">
+        <Segmented
+          label="全员趋势类型"
+          options={Glicko2_MODES}
+          value={mode}
+          onChange={setMode}
+        />
+        <Segmented
+          label="全员趋势季度"
+          options={seasonOptions}
+          value={seasonKey}
+          onChange={(key) => {
+            setSeasonKey(key);
+            setInspectedKey(null);
+          }}
+        />
+      </div>
+
+      <div className="grid gap-[22px] min-[761px]:grid-cols-[minmax(0,1fr)_165px] max-[760px]:gap-4">
+        <div className="min-w-0 self-center">
+          {rows.length === 0 ? (
+            <div className="grid min-h-[265px] place-items-center rounded-[10px] bg-secondary text-xs text-muted-foreground">
+              该季度还没有比赛数据，记一场后这里会出现趋势。
+            </div>
+          ) : selected.size === 0 ? (
+            <div className="grid min-h-[265px] place-items-center rounded-[10px] bg-secondary text-xs text-muted-foreground">
+              选择下方成员，查看评分趋势。
+            </div>
+          ) : (
+            <>
+              <div className="h-[250px] min-[761px]:h-[290px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart
+                    data={chartData}
+                    margin={{ top: 8, right: 8, bottom: 4, left: 0 }}
+                    onMouseMove={(state) => {
+                      const label = (state as { activeLabel?: string | number })
+                        ?.activeLabel;
+                      if (typeof label === "string") setInspectedKey(label);
+                    }}
+                    onMouseLeave={() => setInspectedKey(null)}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 5"
+                      stroke="var(--border)"
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="key"
+                      tickFormatter={(key) =>
+                        rowByKey.get(String(key))
+                          ? shortDate(rowByKey.get(String(key))!.at.slice(0, 10))
+                          : ""
+                      }
+                      tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+                      tickMargin={6}
+                      minTickGap={40}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    {mode === "elo" ? (
+                      <YAxis
+                        domain={["dataMin - 15", "dataMax + 15"]}
+                        tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+                        width={36}
+                        tickLine={false}
+                        axisLine={false}
+                      />
+                    ) : (
+                      <YAxis
+                        reversed
+                        domain={[1, maxRank]}
+                        allowDecimals={false}
+                        tickCount={Math.min(6, maxRank)}
+                        tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+                        width={24}
+                        tickLine={false}
+                        axisLine={false}
+                      />
+                    )}
+                    <Tooltip
+                      content={(tooltipProps) => (
+                        <TrendEventTooltip
+                          active={tooltipProps.active}
+                          rowKey={tooltipProps.label}
+                          rowsByKey={rowByKey}
+                          selectedIds={selectedPlayers.map((p) => p.id)}
+                          nameOf={nameOf}
+                        />
+                      )}
+                      cursor={{
+                        stroke: "var(--muted-foreground)",
+                        strokeDasharray: "3 4",
+                        strokeOpacity: 0.55,
+                      }}
+                    />
+                    {selectedPlayers.map((p) => (
+                      <React.Fragment key={p.id}>
+                        <Line
+                          type="monotone"
+                          dataKey={String(p.id)}
+                          name={p.name}
+                          stroke={seriesVar(colorIndexOf.get(p.id) ?? 0)}
+                          strokeWidth={selectedPlayers.length === 1 ? 3 : 2}
+                          dot={false}
+                          activeDot={{ r: 3 }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey={`${p.id}:est`}
+                          name={`${p.name}（本周预估）`}
+                          stroke={seriesVar(colorIndexOf.get(p.id) ?? 0)}
+                          strokeWidth={selectedPlayers.length === 1 ? 3 : 2}
+                          strokeDasharray="5 4"
+                          dot={false}
+                          activeDot={{ r: 3 }}
+                        />
+                      </React.Fragment>
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              {/* 键盘 / 触碰兜底：事件时点按钮行 */}
+              <div
+                className="mt-1 flex gap-0.5 overflow-x-auto pb-1"
+                role="group"
+                aria-label="选择查看日期"
+              >
+                {rows.map((row) => (
+                  <button
+                    key={row.key}
+                    type="button"
+                    onClick={() => setInspectedKey(row.key)}
+                    onFocus={() => setInspectedKey(row.key)}
+                    aria-label={`查看 ${row.at.slice(0, 10)} 全员评分`}
+                    className={cn(
+                      "shrink-0 rounded px-1.5 py-0.5 font-num text-[10px] transition-colors",
+                      row.key === inspected
+                        ? "bg-secondary font-bold text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {shortDate(row.at.slice(0, 10))}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        <aside
+          aria-live="polite"
+          className="min-[761px]:border-l min-[761px]:border-border min-[761px]:pl-5 max-[760px]:border-t max-[760px]:border-border max-[760px]:pt-3"
+        >
+          <div className="mb-2 flex items-center justify-between gap-2 text-[9px] text-muted-foreground">
+            <span>{inspectedRow ? shortDate(inspectedRow.at.slice(0, 10)) : "—"}</span>
+            <span>
+              {mode === "rank" ? "名次 / 评分" : "评分"}
+              {inspectedRow?.kind === "match_estimated" ? " · 预估" : ""}
+              {inspectedRow?.kind === "season_reset" ? " · 重置" : ""}
+            </span>
+          </div>
+          {selected.size === 0 ? (
+            <p className="py-3 text-xs text-muted-foreground">尚未选择成员</p>
+          ) : (
+            <div className="max-[760px]:grid max-[760px]:grid-cols-2 max-[760px]:gap-x-5">
+              {readoutRows.map(({ player, rank, rating }) => (
+                <Link
+                  key={player.id}
+                  href={`/players/${player.id}${ratingQuery}`}
+                  className="flex items-center gap-[7px] py-[7px] text-[11px] transition-colors hover:text-win"
+                >
+                  <span className="min-w-[13px] font-num text-[10px] text-muted-foreground">
+                    {rank !== undefined ? String(rank).padStart(2, "0") : "—"}
+                  </span>
+                  <span
+                    className="size-[7px] shrink-0 rounded-full"
+                    style={{
+                      background: seriesVar(colorIndexOf.get(player.id) ?? 0),
+                    }}
+                  />
+                  <span className="truncate">
+                    {player.name}
+                    {player.id === myId && (
+                      <small className="ml-1 text-[9px] text-muted-foreground">
+                        我
+                      </small>
+                    )}
+                  </span>
+                  <strong className="ml-auto font-num text-[17px] font-medium">
+                    {rating}
+                  </strong>
+                </Link>
+              ))}
+            </div>
+          )}
+        </aside>
+      </div>
+
+      <div className="mt-[17px] flex justify-between gap-3 text-[10px] text-muted-foreground max-[760px]:mt-4 max-[760px]:text-[9px]">
+        <span>点击日期查看该时点的排名与评分</span>
+        <span className="inline-flex items-center gap-2.5">
+          <span className="inline-flex items-center gap-1">
+            <span className="inline-block w-4 border-t-2 border-current" />
+            正式结算
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="inline-block w-4 border-t-2 border-dashed border-current" />
+            本周预估
+          </span>
+        </span>
       </div>
 
       <div className="mt-[19px] border-t border-border pt-[13px] max-[760px]:mt-4 max-[760px]:pt-2.5">
