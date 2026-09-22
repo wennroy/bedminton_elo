@@ -30,6 +30,12 @@ export interface SchedulerOptions {
   startTemp?: number;
   alphaDecay?: number;
   floor?: number;
+  /**
+   * 自定义「A 队胜率」回调：注入后优化目标 closeness 完全由它驱动
+   * （如 glicko2 用 predictDoubles）。缺省回调用 players 走
+   * predictTeamOutcomeWin，与旧行为逐比特一致，旧 golden 不变。
+   */
+  winProbability?: (match: ScheduledMatch) => number;
 }
 
 export type PRNG = () => number;
@@ -108,7 +114,7 @@ function choice<T>(arr: T[], rng: PRNG): T {
 function computeLoss(
   schedule: ScheduledMatch[],
   playerIds: string[],
-  players: TrueSkillPlayer[],
+  winProbability: (match: ScheduledMatch) => number,
   lambdaWeight: number
 ): {
   totalLoss: number;
@@ -137,10 +143,9 @@ function computeLoss(
       counts.set(id, (counts.get(id) ?? 0) + 1);
     }
 
-    const p = predictTeamOutcomeWin(
-      team1.map((id) => players[playerIds.indexOf(id)]),
-      team2.map((id) => players[playerIds.indexOf(id)])
-    );
+    // closeness 完全由注入的胜率回调决定；缺省回调与旧
+    // predictTeamOutcomeWin 路径逐比特一致（见 optimizeSchedule）。
+    const p = winProbability(match);
     const closeness = Math.abs(p - 0.5);
     closenessList.push(closeness);
   }
@@ -242,11 +247,26 @@ export function optimizeSchedule(options: SchedulerOptions): SchedulerResult {
     startTemp = 1.0,
     alphaDecay = 0.995,
     floor = 1e-4,
+    winProbability,
   } = options;
+
+  // 缺省回调：与旧硬编码路径完全相同的表达式，保证缺省行为逐比特不变。
+  const winProbabilityOrDefault: (match: ScheduledMatch) => number =
+    winProbability ??
+    ((match: ScheduledMatch) =>
+      predictTeamOutcomeWin(
+        [match.a1, match.a2].map((id) => players[playerIds.indexOf(id)]),
+        [match.b1, match.b2].map((id) => players[playerIds.indexOf(id)])
+      ));
 
   const rng = mulberry32(seed);
   let bestSchedule = randomInitialSchedule(playerIds, m, rng);
-  let best = computeLoss(bestSchedule, playerIds, players, lambdaWeight);
+  let best = computeLoss(
+    bestSchedule,
+    playerIds,
+    winProbabilityOrDefault,
+    lambdaWeight
+  );
   let currentSchedule = bestSchedule;
   let currentLoss = best.totalLoss;
   let T = startTemp;
@@ -256,7 +276,7 @@ export function optimizeSchedule(options: SchedulerOptions): SchedulerResult {
     const neighborLoss = computeLoss(
       neighbor,
       playerIds,
-      players,
+      winProbabilityOrDefault,
       lambdaWeight
     );
 
