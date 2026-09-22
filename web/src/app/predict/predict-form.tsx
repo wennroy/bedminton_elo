@@ -3,20 +3,44 @@
 import * as React from "react";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { predictElo, predictEloDeltas } from "@/lib/elo";
+import type { RatingModel } from "@/lib/ratings/types";
 import { RotateCcw } from "lucide-react";
 
 type Slot = number | null;
 
 interface PredictFormProps {
   players: { id: number; name: string }[];
-  ratings: Map<number, { elo: number; mu: number; sigma: number }>;
+  /** Legacy 分支所需的当前 ELO 等（服务端 recomputeAllRatings）；glicko2 分支为 null。 */
+  ratings: Map<number, { elo: number; mu: number; sigma: number }> | null;
+  /** 当前评分模型：legacy 走客户端本地计算（逐比特不变），glicko2 走 /api/predict。 */
+  model: RatingModel;
   initialTeamA?: [Slot, Slot];
   initialTeamB?: [Slot, Slot];
+}
+
+/** /api/predict glicko2 fresh 响应的客户端形状（PredictionPlayerOutcome 语义）。 */
+interface GlickoOutcome {
+  playerId: number;
+  before: { r: number; rd: number; volatility: number };
+  after: { r: number; rd: number; volatility: number };
+  delta: number;
+}
+
+interface GlickoPrediction {
+  model: "glicko2";
+  freshness: "fresh";
+  asOf: string;
+  version: string;
+  inputHash: string;
+  segmentId: string;
+  preWinA: number;
+  players: Array<{ playerId: number; win: GlickoOutcome; loss: GlickoOutcome }>;
 }
 
 export function PredictForm({
   players,
   ratings,
+  model,
   initialTeamA,
   initialTeamB,
 }: PredictFormProps) {
@@ -45,8 +69,9 @@ export function PredictForm({
   const teamBIds = React.useMemo(() => teamB.filter((id): id is number => id !== null), [teamB]);
   const ready = teamAIds.length === 2 && teamBIds.length === 2;
 
+  // Legacy 分支：客户端本地 predictElo/predictEloDeltas，逐比特保持旧语义。
   const eloPrediction = React.useMemo(() => {
-    if (!ready) return null;
+    if (model !== "legacy" || !ready || ratings === null) return null;
     const eloRatings: Record<string, number> = {};
     for (const p of players) {
       eloRatings[String(p.id)] = ratings.get(p.id)?.elo ?? 1000;
@@ -59,7 +84,59 @@ export function PredictForm({
       teamAWin: predictElo(a1, a2, b1, b2, eloRatings).teamAWin,
       deltas: predictEloDeltas(a1, a2, b1, b2, eloRatings),
     };
-  }, [ready, teamAIds, teamBIds, players, ratings]);
+  }, [model, ready, teamAIds, teamBIds, players, ratings]);
+
+  // glicko2 分支：阵容变化防抖调用 /api/predict（同一 asOf 工作快照）；
+  // stale/unavailable 如实显示，不伪造数字、不静默退回本地 Legacy 计算。
+  const [glicko, setGlicko] = React.useState<GlickoPrediction | null>(null);
+  const [glickoError, setGlickoError] = React.useState<string | null>(null);
+  const [glickoLoading, setGlickoLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    if (model !== "glicko2") return;
+    if (!ready) {
+      setGlicko(null);
+      setGlickoError(null);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setGlickoLoading(true);
+      try {
+        const res = await fetch("/api/predict", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pa1: teamAIds[0],
+            pa2: teamAIds[1],
+            pb1: teamBIds[0],
+            pb2: teamBIds[1],
+            rating: "glicko2",
+          }),
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => null);
+          setGlicko(null);
+          setGlickoError(
+            (data?.reason ?? data?.error ?? `HTTP ${res.status}`).toString()
+          );
+          return;
+        }
+        setGlicko((await res.json()) as GlickoPrediction);
+        setGlickoError(null);
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setGlickoError(error instanceof Error ? error.message : "预测失败");
+      } finally {
+        if (!controller.signal.aborted) setGlickoLoading(false);
+      }
+    }, 250);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [model, ready, teamAIds, teamBIds]);
 
   const slots = [...teamA, ...teamB];
   const activeLabel = `${activeSlot < 2 ? "A" : "B"} 队第 ${(activeSlot % 2) + 1} 位`;
@@ -107,22 +184,51 @@ export function PredictForm({
             playerMap={playerMap}
           />
         </div>
-        {eloPrediction ? (
+        {model === "legacy" ? (
+          eloPrediction ? (
+            <div role="status" aria-label="预测胜率" className="rounded-xl border border-border bg-card px-3 py-2.5">
+              <WinProbability teamAWin={eloPrediction.teamAWin} />
+            </div>
+          ) : (
+            <p role="status" className="text-center text-xs text-muted-foreground">
+              请为两队各选 2 人（已选 {selected.size}/4）
+            </p>
+          )
+        ) : glickoError ? (
+          <div
+            role="alert"
+            className="rounded-xl border border-dashed border-loss/60 bg-loss-bg px-3 py-2.5 text-xs leading-relaxed text-loss"
+          >
+            新版评分暂不可用，无法预测：{glickoError}。可切换到 Legacy
+            模式查看旧版预测。
+          </div>
+        ) : glicko ? (
           <div role="status" aria-label="预测胜率" className="rounded-xl border border-border bg-card px-3 py-2.5">
-            <WinProbability teamAWin={eloPrediction.teamAWin} />
+            <WinProbability teamAWin={glicko.preWinA} />
           </div>
         ) : (
           <p role="status" className="text-center text-xs text-muted-foreground">
-            请为两队各选 2 人（已选 {selected.size}/4）
+            {glickoLoading
+              ? "正在计算新版预测…"
+              : `请为两队各选 2 人（已选 ${selected.size}/4）`}
           </p>
         )}
       </div>
 
-      {ready && eloPrediction && (
+      {ready && model === "legacy" && eloPrediction && (
         <PredictResult
           teamAPlayers={teamAIds.map((id) => playerMap.get(id)!)}
           teamBPlayers={teamBIds.map((id) => playerMap.get(id)!)}
           deltas={eloPrediction.deltas}
+        />
+      )}
+
+      {ready && model === "glicko2" && glicko && !glickoError && (
+        <GlickoPredictResult
+          teamAPlayers={teamAIds.map((id) => playerMap.get(id)!)}
+          teamBPlayers={teamBIds.map((id) => playerMap.get(id)!)}
+          players={glicko.players}
+          version={glicko.version}
         />
       )}
 
@@ -365,6 +471,130 @@ function PredictPlayerRow({
         </span>
         <span className="inline-flex items-baseline gap-[3px] rounded-[5px] bg-loss-bg px-1.5 pt-[2px] pb-[3px] text-[10px] font-semibold whitespace-nowrap text-loss">
           输 <b className="font-num font-bold">−{Math.abs(loss)}</b>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** glicko2 新版预测结果：逐人赢/输模拟（delta 与 before/after RatingState.r）。 */
+function GlickoPredictResult({
+  teamAPlayers,
+  teamBPlayers,
+  players,
+  version,
+}: {
+  teamAPlayers: { id: number; name: string }[];
+  teamBPlayers: { id: number; name: string }[];
+  players: GlickoPrediction["players"];
+  version: string;
+}) {
+  const byId = new Map(players.map((p) => [p.playerId, p]));
+  return (
+    <section
+      aria-label="预测评分变化"
+      className="rounded-2xl border border-border bg-card p-4 shadow-sm"
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <h2 className="text-sm font-semibold">预测评分变化</h2>
+        <span className="text-[10px] text-muted-foreground">
+          新版 · Estimated 预估 · 模型 {version}
+        </span>
+      </div>
+      <div className="mt-[22px] grid grid-cols-[minmax(0,1fr)_1px_minmax(0,1fr)] gap-[10px]">
+        <GlickoTeamColumn
+          label="A 队"
+          side="a"
+          players={teamAPlayers}
+          byId={byId}
+        />
+        <div className="bg-border" />
+        <GlickoTeamColumn
+          label="B 队"
+          side="b"
+          players={teamBPlayers}
+          byId={byId}
+        />
+      </div>
+
+      <p className="mt-[18px] border-t border-border pt-3 text-center text-[10px] leading-relaxed text-muted-foreground">
+        数字为赢/输一场的新版评分（Estimated）变化及赛前/赛后评分，
+        基于当前评分状态；周一正式结算时可能校准
+      </p>
+    </section>
+  );
+}
+
+function GlickoTeamColumn({
+  label,
+  side,
+  players,
+  byId,
+}: {
+  label: string;
+  side: "a" | "b";
+  players: { id: number; name: string }[];
+  byId: Map<number, GlickoPrediction["players"][number]>;
+}) {
+  return (
+    <div className="min-w-0">
+      <div
+        className={`mb-[11px] flex items-center gap-1.5 text-[10px] font-bold tracking-[1px] text-muted-foreground ${
+          side === "b" ? "justify-end" : ""
+        }`}
+      >
+        {side === "a" && <span className="size-2 rounded-full bg-team-a" />}
+        {label}
+        {side === "b" && <span className="size-2 rounded-full bg-team-b" />}
+      </div>
+      <div className="space-y-3">
+        {players.map((player) => (
+          <GlickoPlayerRow
+            key={player.id}
+            player={player}
+            outcome={byId.get(player.id)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function GlickoPlayerRow({
+  player,
+  outcome,
+}: {
+  player: { id: number; name: string };
+  outcome: GlickoPrediction["players"][number] | undefined;
+}) {
+  if (!outcome) return null;
+  const winDelta = Math.round(outcome.win.delta);
+  const lossDelta = Math.round(outcome.loss.delta);
+  return (
+    <div className="flex min-w-0 items-center gap-1.5">
+      <div className="flex min-w-0 flex-1 items-center gap-1.5">
+        <PlayerAvatar
+          name={player.name}
+          size="xs"
+          className="size-6 shrink-0 text-[9px]"
+        />
+        <span className="min-w-0 truncate text-xs font-semibold text-foreground">
+          {player.name}
+        </span>
+      </div>
+      <div className="flex shrink-0 flex-col items-end gap-1">
+        <span className="inline-flex items-baseline gap-[4px] rounded-[5px] bg-win-bg px-1.5 pt-[2px] pb-[3px] text-[10px] font-semibold whitespace-nowrap text-win">
+          赢 <b className="font-num font-bold">+{winDelta}</b>
+          <i className="font-num not-italic font-normal opacity-75">
+            {Math.round(outcome.win.before.r)}→{Math.round(outcome.win.after.r)}
+          </i>
+        </span>
+        <span className="inline-flex items-baseline gap-[4px] rounded-[5px] bg-loss-bg px-1.5 pt-[2px] pb-[3px] text-[10px] font-semibold whitespace-nowrap text-loss">
+          输 <b className="font-num font-bold">−{Math.abs(lossDelta)}</b>
+          <i className="font-num not-italic font-normal opacity-75">
+            {Math.round(outcome.loss.before.r)}→
+            {Math.round(outcome.loss.after.r)}
+          </i>
         </span>
       </div>
     </div>

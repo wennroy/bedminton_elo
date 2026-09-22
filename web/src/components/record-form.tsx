@@ -60,12 +60,81 @@ interface RecordFormProps {
 
 type Slot = number | null;
 
+/** POST /api/matches 响应 rating 字段的客户端形状（MatchRatingField 三态）。 */
+interface RatingChange {
+  playerId: number;
+  before: { r: number; rd: number; volatility: number };
+  after: { r: number; rd: number; volatility: number };
+  delta: number;
+}
+
+type MatchRatingFieldClient =
+  | {
+      state: "ready";
+      model: "glicko2";
+      configVersion: string;
+      asOf: string;
+      segmentId: string;
+      estimate: {
+        matchId: number;
+        playedAt: string;
+        preWinA: number;
+        changes: RatingChange[];
+      };
+      historyRecomputed: boolean;
+    }
+  | { state: "pending"; model: "glicko2"; reason: string }
+  | { state: "not_effective"; model: "glicko2"; reason: string };
+
 function todayString(): string {
   const d = new Date();
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+function notEffectiveDetail(rating: { reason: string }): string {
+  if (rating.reason.includes("not yet effective")) {
+    return "该比赛日期晚于当前评分时点，尚未产生新版计分；未来比赛不展示涨跌，到对应时段结算后生效。";
+  }
+  if (rating.reason === "rating config not initialized") {
+    return "新版评分未启用，本次记录未产生新版计分。";
+  }
+  return `该记录未产生新版计分：${rating.reason}`;
+}
+
+/** ready：按提交槽位顺序把 estimate.changes（RatingState）映射为展示行。 */
+function estimatePlayers(
+  rating: Extract<MatchRatingFieldClient, { state: "ready" }>,
+  slotIds: [Slot, Slot, Slot, Slot],
+  playerMap: Map<number, Player>
+): EloDeltaPlayer[] {
+  const byId = new Map(
+    rating.estimate.changes.map((change) => [change.playerId, change])
+  );
+  const players: EloDeltaPlayer[] = [];
+  for (const id of slotIds) {
+    if (id === null) continue;
+    const change = byId.get(id);
+    if (!change) continue;
+    players.push({
+      id,
+      name: playerMap.get(id)?.name ?? "?",
+      before: change.before.r,
+      after: change.after.r,
+    });
+  }
+  return players;
+}
+
+function resultDescription(rating: MatchRatingFieldClient | null): string {
+  if (rating === null) return "四位球员的 ELO 已更新";
+  if (rating.state === "ready") {
+    return "新版评分已更新（Estimated 预估，周一正式结算）";
+  }
+  if (rating.state === "pending") return "比赛已保存，新版积分暂未更新";
+  return "该记录未产生新版计分";
 }
 
 export function RecordForm({ players, initialSlots, matches }: RecordFormProps) {
@@ -81,6 +150,11 @@ export function RecordForm({ players, initialSlots, matches }: RecordFormProps) 
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [result, setResult] = React.useState<{
     players: EloDeltaPlayer[];
+    /** 旧版 before/after 是否可用（legacyRatingsAvailable=false 时显式标注不可用）。 */
+    legacyAvailable: boolean;
+    /** 新版评分判别字段；旧服务端可能缺省（null → 退回纯 Legacy 展示）。 */
+    rating: MatchRatingFieldClient | null;
+    slotIds: [Slot, Slot, Slot, Slot];
     enteredBy: number;
   } | null>(null);
   const [toast, setToast] = React.useState<string | null>(null);
@@ -133,7 +207,7 @@ export function RecordForm({ players, initialSlots, matches }: RecordFormProps) 
     if (!scoresValid) return "请输入 0–99 的整数比分。";
     if (scoreA === scoreB) return "比赛不能以平局结束，请填写最终比分。";
     if (myId === null) return "请先选择录入人身份，再确认比分。";
-    return "确认后展示四位球员的 ELO 变化";
+    return "确认后展示四位球员的积分变化";
   }
 
   function openSlotPicker(index: number) {
@@ -208,16 +282,30 @@ export function RecordForm({ players, initialSlots, matches }: RecordFormProps) 
         setError(data.error || "提交失败，请重试");
         return;
       }
-      const deltas: EloDeltaPlayer[] = data.after.map(
-        (item: { id: number; name: string; elo: number }, index: number) => ({
-          id: item.id,
-          name: item.name,
-          before: data.before[index].elo,
-          after: item.elo,
-        })
-      );
+      // 旧版 before/after 是可失败的附加计算：缺省时不得伪造 ELO 变化。
+      const legacyAvailable: boolean =
+        data.legacyRatingsAvailable !== false &&
+        Array.isArray(data.before) &&
+        Array.isArray(data.after);
+      const deltas: EloDeltaPlayer[] = legacyAvailable
+        ? data.after.map(
+            (item: { id: number; name: string; elo: number }, index: number) => ({
+              id: item.id,
+              name: item.name,
+              before: data.before[index].elo,
+              after: item.elo,
+            })
+          )
+        : [];
+      const rating = (data.rating ?? null) as MatchRatingFieldClient | null;
       setConfirmOpen(false);
-      setResult({ players: deltas, enteredBy: myId! });
+      setResult({
+        players: deltas,
+        legacyAvailable,
+        rating,
+        slotIds: [slots[0], slots[1], slots[2], slots[3]],
+        enteredBy: myId!,
+      });
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "提交失败，请重试");
@@ -779,10 +867,57 @@ export function RecordForm({ players, initialSlots, matches }: RecordFormProps) 
               比赛已记录
             </DialogTitle>
             <DialogDescription className="text-center">
-              四位球员的 ELO 已更新
+              {resultDescription(result?.rating ?? null)}
             </DialogDescription>
           </DialogHeader>
-          {result && <EloDeltaCard players={result.players} />}
+          {result && (
+            <div className="flex flex-col gap-3">
+              {result.rating?.state === "ready" ? (
+                <>
+                  <EloDeltaCard
+                    players={estimatePlayers(
+                      result.rating,
+                      result.slotIds,
+                      playerMap
+                    )}
+                    caption={`新版评分 · Estimated 预估 · 模型 ${result.rating.configVersion}`}
+                  />
+                  {result.rating.historyRecomputed ? (
+                    <p className="text-center text-[10px] leading-relaxed text-muted-foreground">
+                      该场属于已结算的历史区段：补录已重算下游当前分，
+                      以上为该场自身的单场变化。
+                    </p>
+                  ) : null}
+                </>
+              ) : null}
+              {result.rating?.state === "pending" ? (
+                <p className="rounded-xl border border-dashed border-loss/50 bg-loss-bg p-3 text-xs leading-relaxed text-loss">
+                  比赛已保存，新版积分暂未更新（{result.rating.reason}
+                  ）。评分恢复后会自动更新，无需重复提交。
+                </p>
+              ) : null}
+              {result.rating?.state === "not_effective" ? (
+                <p className="rounded-xl border border-dashed border-border bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground">
+                  {notEffectiveDetail(result.rating)}
+                </p>
+              ) : null}
+              {result.legacyAvailable && result.players.length > 0 ? (
+                <EloDeltaCard
+                  players={result.players}
+                  caption={
+                    result.rating?.state === "ready" ||
+                    result.rating?.state === "pending"
+                      ? "Legacy ELO 参考"
+                      : "ELO"
+                  }
+                />
+              ) : (
+                <p className="text-center text-xs text-muted-foreground">
+                  旧版 ELO 前后对比暂不可用。
+                </p>
+              )}
+            </div>
+          )}
           <div className="flex gap-2.5">
             <Button
               variant="outline"
