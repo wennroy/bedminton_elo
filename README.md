@@ -120,6 +120,14 @@ sudo a2enmod proxy proxy_http
 sudo systemctl restart apache2
 ```
 
+## 实力分与评分模式
+
+- 页面顶部可切换「新版 / Legacy」：新版为 Glicko-2 双打实力分，Legacy 为旧版 ELO，两套分数并存、互不影响，Legacy 视图保留全部旧分数与曲线。
+- 新版周内每场比赛结束立即给出分数变化反馈（标注「预估 Estimated」）；每周一统一结算该周正式分（Final）。
+- 周一结算会把整周的预估统一校准，**分数可能上调也可能下调**——这是评分机制的正常行为，不代表录入有误；个人页可查看每周每场明细与校准量。
+- 每三个月一个赛季：新赛季开始时分数软重置（900～1100 区间保留，两端超出部分保留 75%），不确定性回升，久未参赛者回到更公平的起跑线。
+- 默认展示的评分模型由服务端配置决定（`web/scripts/rating-config.ts`，持久化在数据库 `meta` 表，重启不丢）；未配置时站点按 Legacy 运行。
+
 ## legacy/ 目录说明
 
 `legacy/` 为旧版 Python 实现，包含原始 ELO / TrueSkill 计算逻辑与数据文件。新版 `web/scripts/migrate-legacy.ts` 会在容器首次启动时自动检测旧表结构并把双打比赛迁移到新 schema，迁移状态写入 SQLite `meta` 表，不会重复执行。
