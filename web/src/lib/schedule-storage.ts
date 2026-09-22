@@ -12,7 +12,19 @@ export interface ScheduledMatch {
   winRate: number;
 }
 
-export interface ScheduleResult {
+/**
+ * 配对结果里的模型元信息（glicko2 取评分服务值；legacy 无版本化配置为 null）。
+ * 旧格式记录没有这些字段，读出时显式补 model: null 标识「旧快照」，
+ * 不得给旧记录补造当前模型元信息。
+ */
+export interface ScheduleModelMeta {
+  model: "glicko2" | "legacy" | null;
+  configVersion: string | null;
+  asOf: string | null;
+  inputHash: string | null;
+}
+
+export interface ScheduleResult extends Partial<ScheduleModelMeta> {
   schedule: ScheduledMatch[];
   metrics: {
     alphaVar: number;
@@ -24,7 +36,7 @@ export interface ScheduleResult {
   names: Record<string, string>;
 }
 
-export interface StoredSchedule {
+export interface StoredSchedule extends Partial<ScheduleModelMeta> {
   playerIds: number[];
   matches: number;
   seed: number;
@@ -37,6 +49,21 @@ const KEY_PREFIX = "badminton:schedule:";
 
 function storageKey(userId: number | null): string {
   return `${KEY_PREFIX}${userId ?? "anon"}`;
+}
+
+/** 校验可选模型元信息字段的类型；只允许缺省/null/合法字符串。 */
+function hasValidModelMeta(data: Record<string, unknown>): boolean {
+  const model = data.model;
+  if (model !== undefined && model !== null && model !== "glicko2" && model !== "legacy") {
+    return false;
+  }
+  for (const key of ["configVersion", "asOf", "inputHash"] as const) {
+    const value = data[key];
+    if (value !== undefined && value !== null && typeof value !== "string") {
+      return false;
+    }
+  }
+  return true;
 }
 
 /** 纯校验函数:坏数据一律返回 null,绝不抛异常。 */
@@ -58,6 +85,7 @@ export function parseStoredSchedule(raw: string): StoredSchedule | null {
     ) {
       return null;
     }
+    if (!hasValidModelMeta(data)) return null;
     const r = data.result;
     if (!r || typeof r !== "object") return null;
     if (
@@ -76,6 +104,11 @@ export function parseStoredSchedule(raw: string): StoredSchedule | null {
     }
     if (!r.metrics || typeof r.metrics !== "object") return null;
     if (!r.names || typeof r.names !== "object") return null;
+    if (!hasValidModelMeta(r)) return null;
+    // 旧格式（无模型字段）显式标识为旧快照：只补 model: null，
+    // 不补造 configVersion/asOf/inputHash 等当前元信息。
+    if (data.model === undefined) data.model = null;
+    if (r.model === undefined) r.model = null;
     return data as StoredSchedule;
   } catch {
     return null;
