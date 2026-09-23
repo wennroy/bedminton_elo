@@ -3,8 +3,10 @@ import { projectRatingView } from "./projections";
 import { replayRatings } from "./replay";
 import {
   buildTrendRows,
+  currentSegmentOverlay,
   displayRankRows,
   displayRatingRows,
+  eventLocalDate,
   formatTrendSeasonLabel,
   listTrendSeasons,
 } from "./chart-data";
@@ -201,5 +203,71 @@ describe("listTrendSeasons / formatTrendSeasonLabel", () => {
     expect(formatTrendSeasonLabel("2026-04-01")).toBe("2026年Q2");
     expect(formatTrendSeasonLabel("2026-07-01")).toBe("2026年Q3");
     expect(formatTrendSeasonLabel("2026-10-01")).toBe("2026年Q4");
+  });
+});
+
+describe("eventLocalDate", () => {
+  it("比赛事实日期（YYYY-MM-DD）原样返回", () => {
+    expect(eventLocalDate("2026-09-22")).toBe("2026-09-22");
+  });
+
+  it("ISO 瞬刻转本地日期（本地组件，非 UTC 切片）", () => {
+    const at = "2026-10-05T16:00:00.000Z";
+    const d = new Date(at);
+    const expected = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    expect(eventLocalDate(at)).toBe(expected);
+  });
+
+  it("上海周界午夜在上海时区显示当天，而非 UTC 切片的前一天", () => {
+    // 2026-10-06T00:00:00+08:00 = UTC 2026-10-05T16:00:00Z；slice(0,10) 会错一天
+    const prev = process.env.TZ;
+    process.env.TZ = "Asia/Shanghai";
+    try {
+      expect(eventLocalDate("2026-10-05T16:00:00.000Z")).toBe("2026-10-06");
+    } finally {
+      if (prev === undefined) delete process.env.TZ;
+      else process.env.TZ = prev;
+    }
+  });
+});
+
+describe("currentSegmentOverlay", () => {
+  it("当前区段预估行入集合，锚点为区段前最后一行（跨季周：新段预估锚在旧段 Final）", () => {
+    const view = crossSeasonView();
+    const rows = buildTrendRows(view.points, view.weekSegments);
+    const currentSegmentId = view.weekSegments.at(-1)!.segmentId;
+    const { estimatedKeys, anchorKey } = currentSegmentOverlay(
+      rows,
+      currentSegmentId
+    );
+
+    const lastRow = rows.at(-1)!;
+    expect(lastRow.kind).toBe("match_estimated");
+    expect(lastRow.segment).toBe(currentSegmentId);
+    expect(estimatedKeys).toEqual(new Set([lastRow.key]));
+    // 锚点 = 当前区段前的 weekly_final（实线停在此处，虚线从此接续）
+    expect(anchorKey).toBe(rows.at(-2)!.key);
+    expect(rows.at(-2)!.kind).toBe("weekly_final");
+  });
+
+  it("当前区段无预估行（未赛/无此段）：集合与锚点皆空，实线画到最后一行", () => {
+    const view = crossSeasonView();
+    const rows = buildTrendRows(view.points, view.weekSegments);
+    const { estimatedKeys, anchorKey } = currentSegmentOverlay(
+      rows,
+      "seg:nonexistent"
+    );
+    expect(estimatedKeys.size).toBe(0);
+    expect(anchorKey).toBeUndefined();
+  });
+
+  it("首个区段即当前（无历史）：预估行从第 0 行起，无锚点", () => {
+    const rows = buildTrendRows([
+      point({ eventId: "m:1", order: 0, playerId: 1, segment: "cur" }),
+      point({ eventId: "m:2", order: 1, playerId: 2, segment: "cur" }),
+    ]);
+    const { estimatedKeys, anchorKey } = currentSegmentOverlay(rows, "cur");
+    expect(estimatedKeys).toEqual(new Set(["m:1", "m:2"]));
+    expect(anchorKey).toBeUndefined();
   });
 });

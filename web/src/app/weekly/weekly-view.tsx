@@ -17,6 +17,7 @@ import type {
   WeeklyRatingReport,
   WeeklyStats,
 } from "@/lib/weekly";
+import { eventLocalDate } from "@/lib/ratings/chart-data";
 import {
   Download,
   Flame,
@@ -447,7 +448,7 @@ function RatingReportSection({ report }: { report: WeeklyRatingReport }) {
               <div key={reset.segmentId} className="space-y-1.5">
                 <div className="text-[10px] text-muted-foreground">
                   赛季 {reset.seasonId} 开始 ·{" "}
-                  {reset.at.slice(0, 10).slice(5).replace("-", ".")}
+                  {eventLocalDate(reset.at).slice(5).replace("-", ".")}
                 </div>
                 {reset.changes.map((change) => (
                   <div

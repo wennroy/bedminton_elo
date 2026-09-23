@@ -49,11 +49,14 @@ function RelationPanel({
   kind,
   playerName,
   entries,
+  ratingQuery = "",
 }: {
   kind: Kind;
   playerName: string;
   /** 全量列表（含 <3 场），已按该面板口径排序 */
   entries: RelationRecord[];
+  /** 档案链接保留评分模式，如 "?rating=glicko2"；Legacy 缺省空串。 */
+  ratingQuery?: string;
 }) {
   const [open, setOpen] = React.useState(false);
   const meta = KIND_META[kind];
@@ -90,7 +93,7 @@ function RelationPanel({
       </div>
 
       <Link
-        href={`/players/${hero.id}`}
+        href={`/players/${hero.id}${ratingQuery}`}
         className={cn(
           "mb-[15px] flex items-center justify-between gap-2.5 rounded-[10px] p-[17px_18px]",
           kind === "partners" ? "bg-win-bg" : "bg-secondary"
@@ -125,7 +128,7 @@ function RelationPanel({
             className="mt-3.5 grid grid-cols-[85px_1fr_50px_52px] items-center gap-2.5 text-[11px] max-[1190px]:grid-cols-[70px_1fr_35px_48px] max-[1190px]:gap-[7px]"
           >
             <Link
-              href={`/players/${e.id}`}
+              href={`/players/${e.id}${ratingQuery}`}
               className="flex min-w-0 items-center gap-[7px] font-semibold text-foreground transition-colors hover:text-win"
             >
               <PlayerAvatar
@@ -166,7 +169,7 @@ function RelationPanel({
             {entries.map((e) => (
               <Link
                 key={e.id}
-                href={`/players/${e.id}`}
+                href={`/players/${e.id}${ratingQuery}`}
                 onClick={() => setOpen(false)}
                 className="flex items-center justify-between gap-3 border-t border-border py-3 first:border-t-0"
               >
@@ -199,10 +202,13 @@ export function PlayerRelations({
   playerName,
   partners,
   opponents,
+  ratingQuery = "",
 }: {
   playerName: string;
   partners: RelationRecord[];
   opponents: RelationRecord[];
+  /** 档案链接保留评分模式，如 "?rating=glicko2"；Legacy 缺省空串。 */
+  ratingQuery?: string;
 }) {
   return (
     <section>
@@ -217,11 +223,13 @@ export function PlayerRelations({
           kind="partners"
           playerName={playerName}
           entries={partners}
+          ratingQuery={ratingQuery}
         />
         <RelationPanel
           kind="opponents"
           playerName={playerName}
           entries={opponents}
+          ratingQuery={ratingQuery}
         />
       </div>
     </section>

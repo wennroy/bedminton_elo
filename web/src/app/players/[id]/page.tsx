@@ -288,6 +288,7 @@ export default async function PlayerPage({
           playerName={summary.name}
           partners={relations.partners}
           opponents={relations.opponents}
+          ratingQuery={ratingQuery}
         />
 
         <PlayerMatchHistory matches={matches} playerName={summary.name} />
@@ -448,7 +449,9 @@ export default async function PlayerPage({
           </div>
           <div className={metricSub}>
             {unrated
-              ? "尚未评级 · 完成首场比赛后开始计分"
+              ? result.freshness === "unavailable"
+                ? "评分暂不可用 · 详见上方状态条"
+                : "尚未评级 · 完成首场比赛后开始计分"
               : `${statusLabel} · 最高 ${peakDisplay ?? "—"}`}
           </div>
         </div>
@@ -554,6 +557,7 @@ export default async function PlayerPage({
         playerName={playerName}
         partners={relations.partners}
         opponents={relations.opponents}
+        ratingQuery={ratingQuery}
       />
 
       <PlayerMatchHistory
