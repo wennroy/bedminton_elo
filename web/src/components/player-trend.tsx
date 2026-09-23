@@ -16,7 +16,9 @@ import type { PlayerMatchRecord } from "@/lib/stats";
 import type { RatingView } from "@/lib/ratings/view-types";
 import {
   buildTrendRows,
+  currentSegmentOverlay,
   displayRatingRows,
+  eventLocalDate,
   type DisplayTrendRow,
 } from "@/lib/ratings/chart-data";
 import { cn } from "@/lib/utils";
@@ -74,12 +76,6 @@ function cutoffDate(weeks: number): string {
 
 function shortDate(date: string): string {
   return date.slice(5).replace("-", ".");
-}
-
-/** 事件时点 → 本地日期：比赛事实日期原样返回，ISO 瞬刻转本地（周界 Final/重置是上海午夜）。 */
-function eventLocalDate(at: string): string {
-  if (at.length === 10) return at;
-  return localDateString(new Date(at));
 }
 
 /** 个人 ELO 趋势（mock profile chart）：周期只过滤图表，不改生涯统计 */
@@ -461,23 +457,27 @@ function Glicko2PlayerTrend({
     return rows.filter((row) => eventLocalDate(row.at) >= cutoff);
   }, [rows, range]);
 
+  // 当前区段（未结算）：实线停笔在最后一个正式节点，虚线从锚点行接续。
+  // 在窗口行上计算：锚点被周期过滤裁掉时虚线直接从首个预估点开始。
+  const { estimatedKeys, anchorKey } = React.useMemo(
+    () => currentSegmentOverlay(windowRows, currentSegmentId),
+    [windowRows, currentSegmentId]
+  );
+
   const chartData = React.useMemo(
     () =>
       windowRows.map((row) => {
         const value = row.values[playerId];
-        const estimated =
-          row.kind === "match_estimated" &&
-          row.segment === currentSegmentId &&
-          row.r[playerId] !== undefined;
+        const estimated = estimatedKeys.has(row.key);
         return {
           key: row.key,
           kind: row.kind,
           label: shortDate(eventLocalDate(row.at)),
-          final: value,
-          ...(estimated ? { est: value } : {}),
+          final: estimated ? undefined : value,
+          ...(estimated || row.key === anchorKey ? { est: value } : {}),
         };
       }),
-    [windowRows, playerId, currentSegmentId]
+    [windowRows, playerId, estimatedKeys, anchorKey]
   );
 
   const latest = windowRows[windowRows.length - 1];

@@ -123,7 +123,9 @@ export default async function PlayersPage({ searchParams }: PlayersPageProps) {
         </div>
         <div className="flex shrink-0 items-center gap-2.5">
           <span className="inline-flex items-center rounded-[5px] bg-secondary px-[7px] py-1 text-[10px] font-bold text-muted-foreground">
-            {entries.length} 位球友
+            {result.model === "glicko2" && result.freshness === "unavailable"
+              ? "评分暂不可用"
+              : `${entries.length} 位球友`}
           </span>
           <RatingModeControl current={result.model} />
         </div>
@@ -135,6 +137,11 @@ export default async function PlayersPage({ searchParams }: PlayersPageProps) {
         entries={entries}
         model={result.model}
         ratingQuery={ratingQuery}
+        emptyHint={
+          result.model === "glicko2" && result.freshness === "unavailable"
+            ? "评分暂不可用，原因见上方状态条；比赛事实不受影响。"
+            : undefined
+        }
       />
     </div>
   );

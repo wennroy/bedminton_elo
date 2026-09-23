@@ -19,8 +19,10 @@ import type { LocalDate } from "@/lib/ratings/types";
 import type { RatingView } from "@/lib/ratings/view-types";
 import {
   buildTrendRows,
+  currentSegmentOverlay,
   displayRankRows,
   displayRatingRows,
+  eventLocalDate,
   formatTrendSeasonLabel,
   listTrendSeasons,
 } from "@/lib/ratings/chart-data";
@@ -704,46 +706,58 @@ function Glicko2Trend({
   const rankRows = React.useMemo(() => displayRankRows(rows), [rows]);
   const displayRows = mode === "rank" ? rankRows : ratingRows;
 
-  // 当前区段的逐场预估行（虚线只画这些行上有实际参赛的点）
-  const estimatedKeys = React.useMemo(
-    () =>
-      new Set(
-        rows
-          .filter(
-            (row) =>
-              row.kind === "match_estimated" && row.segment === currentSegmentId
-          )
-          .map((row) => row.key)
-      ),
+  // 当前区段（未结算）：实线停笔在最后一个正式节点，预估虚线从锚点行接续
+  const { estimatedKeys, anchorKey } = React.useMemo(
+    () => currentSegmentOverlay(rows, currentSegmentId),
     [rows, currentSegmentId]
   );
+
+  // 当前区段内有预估点的球员（锚点行只为这些球员补虚线起点）
+  const estimatedPlayerIds = React.useMemo(() => {
+    const ids = new Set<number>();
+    for (const row of rows) {
+      if (estimatedKeys.has(row.key)) {
+        for (const playerId of Object.keys(row.r)) ids.add(Number(playerId));
+      }
+    }
+    return ids;
+  }, [rows, estimatedKeys]);
 
   const rowByKey = React.useMemo(
     () => new Map(rows.map((row) => [row.key, row])),
     [rows]
   );
 
-  // Recharts 行：key = 事件 ID（同刻两事件不合并）；`:est` 为当前周预估虚线值
+  // Recharts 行：key = 事件 ID（同刻两事件不合并）；预估行只留 `:est`
+  // 虚线值（实线 undefined 即停笔）；锚点行带 `:est` 起点让虚线不断线。
   const chartData = React.useMemo(
     () =>
       displayRows.map((row) => {
+        const estimatedRow = estimatedKeys.has(row.key);
         const obj: Record<string, number | string> = {
           key: row.key,
           kind: row.kind,
-          label: shortDate(row.at.slice(0, 10)),
+          label: shortDate(eventLocalDate(row.at)),
         };
-        for (const [playerId, value] of Object.entries(row.values)) {
-          obj[playerId] = value;
+        if (!estimatedRow) {
+          for (const [playerId, value] of Object.entries(row.values)) {
+            obj[playerId] = value;
+          }
         }
-        if (estimatedKeys.has(row.key)) {
+        if (estimatedRow) {
           for (const playerId of Object.keys(row.r)) {
             const value = row.values[Number(playerId)];
+            if (value !== undefined) obj[`${playerId}:est`] = value;
+          }
+        } else if (row.key === anchorKey) {
+          for (const playerId of estimatedPlayerIds) {
+            const value = row.values[playerId];
             if (value !== undefined) obj[`${playerId}:est`] = value;
           }
         }
         return obj;
       }),
-    [displayRows, estimatedKeys]
+    [displayRows, estimatedKeys, anchorKey, estimatedPlayerIds]
   );
 
   const maxRank = React.useMemo(
@@ -874,7 +888,7 @@ function Glicko2Trend({
                       dataKey="key"
                       tickFormatter={(key) =>
                         rowByKey.get(String(key))
-                          ? shortDate(rowByKey.get(String(key))!.at.slice(0, 10))
+                          ? shortDate(eventLocalDate(rowByKey.get(String(key))!.at))
                           : ""
                       }
                       tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
@@ -957,7 +971,7 @@ function Glicko2Trend({
                     type="button"
                     onClick={() => setInspectedKey(row.key)}
                     onFocus={() => setInspectedKey(row.key)}
-                    aria-label={`查看 ${row.at.slice(0, 10)} 全员评分`}
+                    aria-label={`查看 ${eventLocalDate(row.at)} 全员评分`}
                     className={cn(
                       "shrink-0 rounded px-1.5 py-0.5 font-num text-[10px] transition-colors",
                       row.key === inspected
@@ -965,7 +979,7 @@ function Glicko2Trend({
                         : "text-muted-foreground hover:text-foreground"
                     )}
                   >
-                    {shortDate(row.at.slice(0, 10))}
+                    {shortDate(eventLocalDate(row.at))}
                   </button>
                 ))}
               </div>
@@ -978,7 +992,7 @@ function Glicko2Trend({
           className="min-[761px]:border-l min-[761px]:border-border min-[761px]:pl-5 max-[760px]:border-t max-[760px]:border-border max-[760px]:pt-3"
         >
           <div className="mb-2 flex items-center justify-between gap-2 text-[9px] text-muted-foreground">
-            <span>{inspectedRow ? shortDate(inspectedRow.at.slice(0, 10)) : "—"}</span>
+            <span>{inspectedRow ? shortDate(eventLocalDate(inspectedRow.at)) : "—"}</span>
             <span>
               {mode === "rank" ? "名次 / 评分" : "评分"}
               {inspectedRow?.kind === "match_estimated" ? " · 预估" : ""}

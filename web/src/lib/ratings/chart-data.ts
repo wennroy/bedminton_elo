@@ -174,3 +174,42 @@ export function formatTrendSeasonLabel(season: LocalDate): string {
   const quarter = Math.ceil(Number(season.slice(5, 7)) / 3);
   return `${season.slice(0, 4)}年Q${quarter}`;
 }
+
+/**
+ * 事件时点 → 本地日期：比赛事实日期（YYYY-MM-DD）原样返回；ISO 瞬刻
+ * 转本地日期——周界 Final/赛季重置是上海午夜，取 UTC 日期（slice(0,10)）
+ * 在上海时区会显示成前一天。
+ */
+export function eventLocalDate(at: string): LocalDate {
+  if (at.length === 10) return at;
+  const d = new Date(at);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * 当前区段（尚未结算）的实/虚线口径：当前区段的逐场预估行上实线停笔
+ * （正式线只到最后一个 weekly_final/season_reset，不与预估虚线同点重叠），
+ * 虚线从锚点行——当前区段第一个预估行之前的最后一行——接续，视觉不断线。
+ * 当前区段没有预估行时两者皆空，实线画到最后一行。
+ */
+export function currentSegmentOverlay(
+  rows: readonly TrendRow[],
+  currentSegmentId: string
+): { estimatedKeys: ReadonlySet<string>; anchorKey: string | undefined } {
+  const estimatedKeys = new Set<string>();
+  let firstIndex: number | undefined;
+  rows.forEach((row, index) => {
+    if (row.kind === "match_estimated" && row.segment === currentSegmentId) {
+      estimatedKeys.add(row.key);
+      firstIndex = firstIndex ?? index;
+    }
+  });
+  const anchorKey =
+    firstIndex !== undefined && firstIndex > 0
+      ? rows[firstIndex - 1].key
+      : undefined;
+  return { estimatedKeys, anchorKey };
+}

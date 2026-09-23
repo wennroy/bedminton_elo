@@ -82,12 +82,15 @@ export function PlayerDirectory({
   entries,
   model,
   ratingQuery = "",
+  emptyHint,
 }: {
   entries: PlayerDirectoryEntry[];
   /** Legacy 沿用旧文案与口径；glicko2 换「评分」文案并显示状态徽标。 */
   model: "legacy" | "glicko2";
   /** 档案链接保留评分模式，如 "?rating=glicko2"；Legacy 缺省空串。 */
   ratingQuery?: string;
+  /** 空态自定义文案（如评分服务不可用）；缺省为搜索无结果提示。 */
+  emptyHint?: string;
 }) {
   const [search, setSearch] = React.useState("");
   const [sort, setSort] = React.useState<SortKey>("elo");
@@ -155,7 +158,7 @@ export function PlayerDirectory({
       <div className="grid grid-cols-2 gap-3 min-[761px]:gap-5 min-[1191px]:grid-cols-3">
         {visible.length === 0 ? (
           <div className="col-span-full py-[45px] text-center text-[13px] text-muted-foreground">
-            没有找到这位球员，试试其他名字。
+            {emptyHint ?? "没有找到这位球员，试试其他名字。"}
           </div>
         ) : (
           visible.map((p) => (

@@ -267,7 +267,12 @@ export interface WeeklyDataVersionContext {
   nextBoundary: string;
 }
 
-/** 从 stats.ratingReport 构造指纹上下文；legacy（无报告）返回 undefined。 */
+/**
+ * 从 stats.ratingReport 构造指纹上下文；legacy（无报告）返回 undefined。
+ * inputHash 是全库输入指纹：与本周无关的撤回/改名/合并也会使该周 ETag
+ * 失效——重放有路径依赖，跨周影响真实存在（下游当前分会变），故取保守
+ * 失效：宁可多失效一次，不错过该更新的缓存（e2e 场景 8 锁定不变时仍命中）。
+ */
 export function weeklyDataVersionContext(
   stats: WeeklyStats
 ): WeeklyDataVersionContext | undefined {
