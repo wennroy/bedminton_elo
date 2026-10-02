@@ -189,7 +189,8 @@ describe.sequential("predict API", () => {
         expect(outcome.after.volatility).toBeTypeOf("number");
       }
     }
-    // 赢/输模拟的符号按队侧判定：A 队两人赢时涨、输时跌，B 队相反。
+    // 赢/输按「该球员所在队」视角（与 legacy 分支同约）：四人的 win 都涨、
+    // loss 都跌——Glicko-2 里得分 1 恒大于期望，赢方必涨、输方必跌。
     interface Outcome {
       delta: number;
     }
@@ -201,13 +202,9 @@ describe.sequential("predict API", () => {
     const byId = new Map<number, PlayerPrediction>(
       data.players.map((p: PlayerPrediction) => [p.playerId, p])
     );
-    for (const id of [p1, p2]) {
+    for (const id of [p1, p2, p3, p4]) {
       expect(byId.get(id)!.win.delta).toBeGreaterThan(0);
       expect(byId.get(id)!.loss.delta).toBeLessThan(0);
-    }
-    for (const id of [p3, p4]) {
-      expect(byId.get(id)!.win.delta).toBeLessThan(0);
-      expect(byId.get(id)!.loss.delta).toBeGreaterThan(0);
     }
   });
 
