@@ -295,13 +295,24 @@ describe.sequential("rating mutations 全链路一致性", () => {
     // 连续读取：同连接 memo 命中，深度相等。
     expect(loadGlickoSnapshot(db, asOf)).toEqual(first);
 
-    // 连续投影：不重复结算（Final/Estimated 点数量稳定）。
+    // 连续投影：不重复结算（Final/Estimated 点数量稳定）。计数只钉 w1
+    // 所在段：跨季周会把当前周拆成两段并额外结算一个空段（引擎预期行为，
+    // 属日历相关），不应让本断言随墙钟日历失效。
     const playersNow = listPlayers(db);
     const view1 = projectRatingView(first.replay, playersNow);
     const view2 = projectRatingView(first.replay, playersNow);
     expect(view2).toEqual(view1);
-    expect(view1.points.filter((p) => p.kind === "weekly_final")).toHaveLength(4);
-    expect(view1.points.filter((p) => p.kind === "match_estimated")).toHaveLength(8);
+    const w1Segment = view1.weekSegments.find((s) => s.matches.length === 2)!;
+    expect(
+      view1.points.filter(
+        (p) => p.kind === "weekly_final" && p.segment === w1Segment.segmentId
+      )
+    ).toHaveLength(4);
+    expect(
+      view1.points.filter(
+        (p) => p.kind === "match_estimated" && p.segment === w1Segment.segmentId
+      )
+    ).toHaveLength(8);
 
     // 连续预测：不修改原状态。
     const predict = () =>

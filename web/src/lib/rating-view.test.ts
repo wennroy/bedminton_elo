@@ -305,15 +305,23 @@ describe("loadPredictionView", () => {
       before.replay.currentSegment,
       config
     );
+    // win/loss 按「该球员所在队」视角（与 legacy 分支同约）：A 队读 A 胜/负
+    // 模拟，B 队对调（B 赢 = A 负那场）。
     for (const p of result.players) {
-      const w = win.changes.find((c) => c.playerId === p.playerId)!;
-      const l = loss.changes.find((c) => c.playerId === p.playerId)!;
+      const onTeamA = p.playerId === players[0] || p.playerId === players[1];
+      const w = (onTeamA ? win : loss).changes.find(
+        (c) => c.playerId === p.playerId
+      )!;
+      const l = (onTeamA ? loss : win).changes.find(
+        (c) => c.playerId === p.playerId
+      )!;
       expect(p.win.delta).toBe(w.delta);
       expect(p.win.after).toEqual(w.after);
       expect(p.loss.delta).toBe(l.delta);
       expect(p.loss.after).toEqual(l.after);
-      // 赢加输减（对 A 队而言），变化非零。
-      expect(p.win.delta).not.toBe(0);
+      // Glicko-2 得分 1 恒大于期望：四人都是赢涨输跌，且变化非零。
+      expect(p.win.delta).toBeGreaterThan(0);
+      expect(p.loss.delta).toBeLessThan(0);
     }
 
     // 模拟不修改原工作状态：重放前后深度相等。

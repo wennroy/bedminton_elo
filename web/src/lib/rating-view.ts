@@ -392,10 +392,15 @@ export function loadPredictionView(
     inputHash: result.inputHash,
     segmentId: segment.id,
     preWinA,
-    players: playerIds.map((playerId) => ({
-      playerId,
-      win: pick(winEstimate, playerId),
-      loss: pick(lossEstimate, playerId),
-    })),
+    players: playerIds.map((playerId) => {
+      // win/loss 与 legacy 分支同约：按「该球员所在队」的视角——A 队读
+      // A 胜/负两场模拟；B 队对调（B 队赢 = A 负那场、B 队输 = A 胜那场）。
+      const onTeamA = playerId === options.pa1 || playerId === options.pa2;
+      return {
+        playerId,
+        win: pick(onTeamA ? winEstimate : lossEstimate, playerId),
+        loss: pick(onTeamA ? lossEstimate : winEstimate, playerId),
+      };
+    }),
   };
 }
