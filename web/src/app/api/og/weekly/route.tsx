@@ -325,6 +325,88 @@ function FunRow({
   );
 }
 
+/** glicko2 紧凑趣闻行:单行(图标+标签+内容+关键数字),为评分版块让高 */
+function CompactFunRow({
+  icon,
+  label,
+  date,
+  text,
+  noteNum,
+  noteUnit,
+  noteColor,
+  showDivider,
+}: {
+  icon: string;
+  label: string;
+  date?: string;
+  text: string;
+  noteNum: string;
+  noteUnit?: string;
+  noteColor?: string;
+  showDivider: boolean;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 14,
+        padding: "9px 0",
+        ...(showDivider ? { borderTop: `2px solid ${LINE}` } : {}),
+      }}
+    >
+      <span style={{ display: "flex", fontSize: 22 }}>{icon}</span>
+      <span
+        style={{
+          display: "flex",
+          fontSize: 20,
+          fontWeight: 700,
+          whiteSpace: "nowrap",
+        }}
+      >
+        {label}
+      </span>
+      {date ? (
+        <span
+          style={{
+            display: "flex",
+            fontSize: 18,
+            color: MUTED,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {date.slice(5).replace("-", ".")}
+        </span>
+      ) : null}
+      <span
+        style={{
+          display: "flex",
+          fontSize: 20,
+          whiteSpace: "nowrap",
+        }}
+      >
+        {text}
+      </span>
+      <span
+        style={{
+          marginLeft: "auto",
+          display: "flex",
+          alignItems: "baseline",
+          fontSize: 26,
+          fontWeight: 800,
+          whiteSpace: "nowrap",
+          color: noteColor ?? INK,
+        }}
+      >
+        {noteNum}
+        {noteUnit ? (
+          <span style={{ fontSize: 18, fontWeight: 600 }}>{noteUnit}</span>
+        ) : null}
+      </span>
+    </div>
+  );
+}
+
 /**
  * glicko2 评分变化版块（d3 新版块）：与网页共同消费 ratingReport。
  * 段级状态（正式 Final / 预估 Estimated）分列；跨季周两段纵向堆叠不越界；
@@ -332,6 +414,12 @@ function FunRow({
  */
 function RatingReportBlock({ report }: { report: WeeklyRatingReport }) {
   const MAX_ROWS = 3;
+  // 跨季周两段纵向堆叠时各行降 2 人：配合「+N 人见网页」段头提示，
+  // 保证双段 + 重置的极端周总高不顶到绝对定位页脚。
+  const nonEmptySegments = report.segments.filter(
+    (s) => s.players.length > 0
+  ).length;
+  const segmentRows = nonEmptySegments > 1 ? 2 : MAX_ROWS;
   const deltaColor = (value: number) =>
     value > 0 ? WIN : value < 0 ? LOSS : MUTED;
   const fmtDelta = (value: number) => `${value > 0 ? "+" : ""}${value}`;
@@ -343,14 +431,15 @@ function RatingReportBlock({ report }: { report: WeeklyRatingReport }) {
       .sort(
         (a, b) => b.estimatedChange - a.estimatedChange || a.playerId - b.playerId
       )
-      .slice(0, MAX_ROWS);
+      .slice(0, segmentRows);
+    const hiddenCount = segment.players.length - players.length;
     segments.push(
       <div
         key={segment.segmentId}
         style={{
           display: "flex",
           flexDirection: "column",
-          marginTop: segments.length === 0 ? 0 : 22,
+          marginTop: segments.length === 0 ? 0 : 10,
         }}
       >
         <div style={{ display: "flex", alignItems: "baseline", gap: 14 }}>
@@ -369,12 +458,24 @@ function RatingReportBlock({ report }: { report: WeeklyRatingReport }) {
           >
             {segment.status === "final" ? "正式 Final" : "预估 Estimated"}
           </span>
+          {hiddenCount > 0 ? (
+            <span
+              style={{
+                marginLeft: "auto",
+                display: "flex",
+                fontSize: 18,
+                color: MUTED,
+              }}
+            >
+              {`其余 ${hiddenCount} 人见网页`}
+            </span>
+          ) : null}
         </div>
-        <div style={{ display: "flex", flexDirection: "column", marginTop: 8 }}>
+        <div style={{ display: "flex", flexDirection: "column", marginTop: 4 }}>
           {players.map((p) => (
             <div
               key={p.playerId}
-              style={{ display: "flex", alignItems: "center", padding: "8px 0" }}
+              style={{ display: "flex", alignItems: "center", padding: "4px 0" }}
             >
               <span
                 style={{
@@ -422,12 +523,17 @@ function RatingReportBlock({ report }: { report: WeeklyRatingReport }) {
                           alignItems: "baseline",
                           fontSize: 24,
                           fontWeight: 700,
-                          color: deltaColor(p.correction),
+                          // 与网页同约 muted 色：彩色校准值与 Final 小标相邻
+                          // 会读作一个数（「+1Final 1014」粘连）；另加间距。
+                          color: MUTED,
+                          marginRight: 8,
                         }}
                       >
                         {`校准 ${fmtDelta(p.correction)}`}
                       </span>
                     ) : null}
+                    {/* 与网页同约「Final 1430」前缀序：后缀序会让校准值与
+                        Final 值两个数字相邻（「校准 -1 1430」误读成 -11430）。 */}
                     <span
                       style={{
                         display: "flex",
@@ -436,12 +542,12 @@ function RatingReportBlock({ report }: { report: WeeklyRatingReport }) {
                         fontWeight: 800,
                       }}
                     >
-                      {p.finalR}
                       <span
-                        style={{ fontSize: 18, fontWeight: 600, color: MUTED, marginLeft: 4 }}
+                        style={{ fontSize: 18, fontWeight: 600, color: MUTED, marginRight: 4 }}
                       >
                         Final
                       </span>
+                      {p.finalR}
                     </span>
                   </>
                 ) : (
@@ -453,22 +559,17 @@ function RatingReportBlock({ report }: { report: WeeklyRatingReport }) {
                       fontWeight: 750,
                     }}
                   >
-                    {p.endEstimatedR}
                     <span
-                      style={{ fontSize: 18, fontWeight: 600, color: MUTED, marginLeft: 4 }}
+                      style={{ fontSize: 18, fontWeight: 600, color: MUTED, marginRight: 4 }}
                     >
                       当前
                     </span>
+                    {p.endEstimatedR}
                   </span>
                 )}
               </div>
             </div>
           ))}
-          {segment.players.length > MAX_ROWS ? (
-            <div style={{ display: "flex", fontSize: 18, color: MUTED, marginTop: 4 }}>
-              {`其余 ${segment.players.length - MAX_ROWS} 人见网页周报`}
-            </div>
-          ) : null}
         </div>
       </div>
     );
@@ -480,16 +581,16 @@ function RatingReportBlock({ report }: { report: WeeklyRatingReport }) {
     resets.push(
       <div
         key={reset.segmentId}
-        style={{ display: "flex", flexDirection: "column", marginTop: 18 }}
+        style={{ display: "flex", flexDirection: "column", marginTop: 8 }}
       >
         <div style={{ display: "flex", fontSize: 20, fontWeight: 700, color: MUTED }}>
           {`赛季重置 · ${reset.seasonId} 开始`}
         </div>
-        <div style={{ display: "flex", flexDirection: "column", marginTop: 6 }}>
+        <div style={{ display: "flex", flexDirection: "column", marginTop: 4 }}>
           {changes.map((c) => (
             <div
               key={c.playerId}
-              style={{ display: "flex", alignItems: "center", padding: "5px 0" }}
+              style={{ display: "flex", alignItems: "center", padding: "3px 0" }}
             >
               <span
                 style={{
@@ -527,15 +628,23 @@ function RatingReportBlock({ report }: { report: WeeklyRatingReport }) {
       style={{
         display: "flex",
         flexDirection: "column",
-        marginTop: 40,
+        marginTop: 24,
         borderRadius: 28,
         background: SURFACE,
         border: `2px solid ${LINE}`,
-        padding: "26px 36px",
+        padding: "18px 36px",
       }}
     >
       <div style={{ display: "flex", alignItems: "baseline", gap: 16 }}>
-        <span style={{ display: "flex", fontSize: 28, fontWeight: 750 }}>
+        <span
+          style={{
+            display: "flex",
+            fontSize: 28,
+            fontWeight: 750,
+            flexShrink: 0,
+            whiteSpace: "nowrap",
+          }}
+        >
           评分变化
         </span>
         <span
@@ -545,19 +654,25 @@ function RatingReportBlock({ report }: { report: WeeklyRatingReport }) {
             fontWeight: 700,
             letterSpacing: 3,
             color: MUTED,
+            flexShrink: 0,
+            whiteSpace: "nowrap",
           }}
         >
           RATING
         </span>
+        {/* 版本全串（含全部引擎参数）长达百字符，flex 下会挤窄标题换行并
+            与 RATING 小标交叠；首段（如 glicko2-doubles-v1）足以标识模型。 */}
         <span
           style={{
             marginLeft: "auto",
             display: "flex",
             fontSize: 20,
             color: MUTED,
+            flexShrink: 0,
+            whiteSpace: "nowrap",
           }}
         >
-          {`模型 ${report.version}`}
+          {`模型 ${report.version.split("|")[0]}`}
           {report.freshness === "stale" ? " · 最后成功结算" : ""}
         </span>
       </div>
@@ -581,6 +696,11 @@ function WeeklyCard({
     report !== undefined &&
     (report.resets.length > 0 ||
       report.segments.some((s) => s.players.length > 0));
+  // 跨季双段周（段结算 + 当前段预估并存）内容最高：趣闻收敛为 1 条，
+  // 单段周 2 条，余量留给绝对定位页脚。
+  const crossSeason =
+    report !== undefined &&
+    report.segments.filter((s) => s.players.length > 0).length > 1;
 
   const eloColor = (change: number) =>
     change > 0 ? WIN : change < 0 ? LOSS : MUTED;
@@ -620,52 +740,69 @@ function WeeklyCard({
         ]),
   ];
 
-  const funRows: ReactNode[] = [];
+  // 趣闻数据化：legacy 用 FunRow 大卡逐条渲染（版式逐比特不变）；
+  // glicko2 评分版块占高时换 CompactFunRow 单行，按周型收敛条数。
+  interface FunItem {
+    key: string;
+    icon: string;
+    label: string;
+    date?: string;
+    noteNum: string;
+    noteUnit?: string;
+    noteLabel: string;
+    noteColor?: string;
+    content: ReactNode;
+    compactText: string;
+  }
+  const compactMatch = (m: FunMatch) => {
+    const aWon = m.scoreA > m.scoreB;
+    const winners = aWon ? m.teamA : m.teamB;
+    const losers = aWon ? m.teamB : m.teamA;
+    const wScore = aWon ? m.scoreA : m.scoreB;
+    const lScore = aWon ? m.scoreB : m.scoreA;
+    return `${truncate(winners[0], 8)} / ${truncate(winners[1], 8)} ${wScore}:${lScore} 胜 ${truncate(losers[0], 8)} / ${truncate(losers[1], 8)}`;
+  };
+  const funItems: FunItem[] = [];
   const { fun } = stats;
   if (fun.closest) {
-    funRows.push(
-      <FunRow
-        key="closest"
-        icon="🎯"
-        label="最胶着一战"
-        date={fun.closest.date}
-        noteNum={String(Math.abs(fun.closest.scoreA - fun.closest.scoreB))}
-        noteUnit=" 分"
-        noteLabel="分差"
-        showDivider={funRows.length > 0}
-      >
-        <FunMatchLines m={fun.closest} />
-      </FunRow>
-    );
+    funItems.push({
+      key: "closest",
+      icon: "🎯",
+      label: "最胶着一战",
+      date: fun.closest.date,
+      noteNum: String(Math.abs(fun.closest.scoreA - fun.closest.scoreB)),
+      noteUnit: " 分",
+      noteLabel: "分差",
+      content: <FunMatchLines m={fun.closest} />,
+      compactText: compactMatch(fun.closest),
+    });
   }
   if (fun.blowout) {
-    funRows.push(
-      <FunRow
-        key="blowout"
-        icon="💥"
-        label="本周惨案"
-        date={fun.blowout.date}
-        noteNum={String(Math.abs(fun.blowout.scoreA - fun.blowout.scoreB))}
-        noteUnit=" 分"
-        noteLabel="净胜"
-        showDivider={funRows.length > 0}
-      >
-        <FunMatchLines m={fun.blowout} />
-      </FunRow>
-    );
+    funItems.push({
+      key: "blowout",
+      icon: "💥",
+      label: "本周惨案",
+      date: fun.blowout.date,
+      noteNum: String(Math.abs(fun.blowout.scoreA - fun.blowout.scoreB)),
+      noteUnit: " 分",
+      noteLabel: "净胜",
+      content: <FunMatchLines m={fun.blowout} />,
+      compactText: compactMatch(fun.blowout),
+    });
   }
   if (fun.streakKing) {
-    funRows.push(
-      <FunRow
-        key="streak"
-        icon="🔥"
-        label="周连胜王"
-        noteNum={String(fun.streakKing.streak)}
-        noteUnit=" 连胜"
-        noteLabel="当前"
-        showDivider={funRows.length > 0}
-      >
+    funItems.push({
+      key: "streak",
+      icon: "🔥",
+      label: "周连胜王",
+      noteNum: String(fun.streakKing.streak),
+      noteUnit: " 连胜",
+      noteLabel: "当前",
+      // 注意必须用数组而非 Fragment 包裹：Satori 把 Fragment 当单个 flex
+      // 子项（内部默认横排），双行会塌成一行（legacy 版式回归）。
+      content: [
         <div
+          key="name"
           style={{
             display: "flex",
             fontSize: 28,
@@ -675,8 +812,9 @@ function WeeklyCard({
           }}
         >
           {truncate(fun.streakKing.name, 16)}
-        </div>
+        </div>,
         <div
+          key="note"
           style={{
             display: "flex",
             fontSize: 22,
@@ -685,26 +823,24 @@ function WeeklyCard({
           }}
         >
           本周未逢败绩
-        </div>
-      </FunRow>
-    );
+        </div>,
+      ],
+      compactText: `${truncate(fun.streakKing.name, 10)} 本周未逢败绩`,
+    });
   }
   if (fun.upset) {
     const u: UpsetMatch = fun.upset;
-    funRows.push(
-      <FunRow
-        key="upset"
-        icon="😱"
-        label="本周最大冷门"
-        date={u.date}
-        noteNum={`${Math.round(u.winnerWinProb * 100)}%`}
-        noteLabel="赛前胜率"
-        noteColor={LOSS}
-        showDivider={funRows.length > 0}
-      >
-        <FunMatchLines m={u} />
-      </FunRow>
-    );
+    funItems.push({
+      key: "upset",
+      icon: "😱",
+      label: "本周最大冷门",
+      date: u.date,
+      noteNum: `${Math.round(u.winnerWinProb * 100)}%`,
+      noteLabel: "赛前胜率",
+      noteColor: LOSS,
+      content: <FunMatchLines m={u} />,
+      compactText: compactMatch(u),
+    });
   }
 
   return (
@@ -808,13 +944,14 @@ function WeeklyCard({
         <RatingReportBlock report={report} />
       ) : null}
 
-      {/* 最佳组合:深色 court 横条 */}
+      {/* 最佳组合:深色 court 横条；glicko2 评分版块占高时间距让位，
+          legacy 分支版式逐比特不变 */}
       {stats.bestPair && (
         <div
           style={{
             display: "flex",
             alignItems: "center",
-            marginTop: 40,
+            marginTop: hasRatingReport ? 24 : 40,
             borderRadius: 32,
             background: COURT,
             padding: "32px 48px",
@@ -895,29 +1032,91 @@ function WeeklyCard({
         </div>
       )}
 
-      {/* 本周趣闻 */}
-      {funRows.length > 0 && (
-        <div
-          style={{ display: "flex", flexDirection: "column", marginTop: 40 }}
-        >
+      {/* 本周趣闻：legacy 用 FunRow 大卡逐条（版式逐比特不变）；
+          glicko2 评分版块占高时换 CompactFunRow 单行并收敛条数
+          （单段周 3 条、跨季双段周 1 条），保证不溢出页脚 */}
+      {funItems.length > 0 &&
+        (hasRatingReport ? (
           <div
-            style={{
-              display: "flex",
-              fontSize: 22,
-              fontWeight: 700,
-              letterSpacing: 4,
-              color: MUTED,
-            }}
+            style={{ display: "flex", flexDirection: "column", marginTop: 24 }}
           >
-            本周趣闻 · HIGHLIGHTS
+            <div
+              style={{
+                display: "flex",
+                fontSize: 22,
+                fontWeight: 700,
+                letterSpacing: 4,
+                color: MUTED,
+              }}
+            >
+              本周趣闻 · HIGHLIGHTS
+            </div>
+            <div
+              style={{ display: "flex", flexDirection: "column", marginTop: 2 }}
+            >
+              {funItems.slice(0, crossSeason ? 1 : 3).map((item, i) => (
+                <CompactFunRow
+                  key={item.key}
+                  icon={item.icon}
+                  label={item.label}
+                  date={item.date}
+                  text={item.compactText}
+                  noteNum={item.noteNum}
+                  noteUnit={item.noteUnit}
+                  noteColor={item.noteColor}
+                  showDivider={i > 0}
+                />
+              ))}
+              {funItems.length > (crossSeason ? 1 : 3) ? (
+                <div
+                  style={{
+                    display: "flex",
+                    fontSize: 18,
+                    color: MUTED,
+                    marginTop: 4,
+                  }}
+                >
+                  {`其余 ${funItems.length - (crossSeason ? 1 : 3)} 条趣闻见网页周报`}
+                </div>
+              ) : null}
+            </div>
           </div>
+        ) : (
           <div
-            style={{ display: "flex", flexDirection: "column", marginTop: 4 }}
+            style={{ display: "flex", flexDirection: "column", marginTop: 40 }}
           >
-            {funRows}
+            <div
+              style={{
+                display: "flex",
+                fontSize: 22,
+                fontWeight: 700,
+                letterSpacing: 4,
+                color: MUTED,
+              }}
+            >
+              本周趣闻 · HIGHLIGHTS
+            </div>
+            <div
+              style={{ display: "flex", flexDirection: "column", marginTop: 4 }}
+            >
+              {funItems.map((item, i) => (
+                <FunRow
+                  key={item.key}
+                  icon={item.icon}
+                  label={item.label}
+                  date={item.date}
+                  noteNum={item.noteNum}
+                  noteUnit={item.noteUnit}
+                  noteLabel={item.noteLabel}
+                  noteColor={item.noteColor}
+                  showDivider={i > 0}
+                >
+                  {item.content}
+                </FunRow>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        ))}
 
       {!hasData && (
         <div
@@ -933,7 +1132,8 @@ function WeeklyCard({
         </div>
       )}
 
-      {/* 底部:绝对定位,与上方内容区无重叠风险(内容最大高度约 1500) */}
+      {/* 底部:绝对定位,与上方内容区无重叠风险(内容最大高度约 1500;
+          glicko2 跨季周经行数收敛与间距压缩后同样受控) */}
       <div
         style={{
           position: "absolute",
