@@ -319,7 +319,10 @@ export function weeklyDataVersion(
 // 放在 lib 是因为 route 文件只允许导出 HTTP 方法,build 期类型检查会拦。
 // d3: glicko2 模式新增「评分变化」版块（段级 Estimated/Final + 重置），
 // 同阵容行数上限与长姓名截断；legacy 版式不变。
-export const OG_DESIGN_VERSION = "d3";
+// d4: 评分版块标题防挤压（版本串只取首段）、Final/当前改前缀序（修
+// 「校准 -1」与 Final 值粘连误读）、跨季双段周行数收敛与间距压缩（修
+// 内容溢出与绝对定位页脚重叠、趣闻被裁）；legacy 版式仍不变。
+export const OG_DESIGN_VERSION = "d4";
 
 /** 上海周一界的本地日期加减（纯 UTC 数学，不依赖主机 TZ）。 */
 function addDaysLocal(localDate: string, days: number): string {
