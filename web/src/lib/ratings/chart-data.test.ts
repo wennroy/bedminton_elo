@@ -7,6 +7,7 @@ import {
   currentSegmentOverlay,
   displayRankRows,
   displayRatingRows,
+  estimatedLineValues,
   eventLocalDate,
   formatTrendSeasonLabel,
   listTrendSeasons,
@@ -376,5 +377,95 @@ describe("appendCurrentEstimateRow", () => {
     });
     expect(baseRows).toEqual(before);
     expect(frozen).toEqual(before);
+  });
+});
+
+describe("estimatedLineValues", () => {
+  // 旧段 m:1 + 结算 f:1（锚点）；当前区段两行预估：m:2 有 1 参赛，
+  // m:3 只有 2 参赛（1 缺席、2 本周首次参赛）。
+  const rows = buildTrendRows([
+    point({ eventId: "m:1", order: 0, playerId: 1, r: 1009.6 }),
+    point({
+      eventId: "f:1",
+      order: 1,
+      kind: "weekly_final",
+      at: "2026-09-28T16:00:00Z",
+      playerId: 1,
+      r: 1012.2,
+      status: "final",
+    }),
+    point({ eventId: "m:2", order: 2, playerId: 1, r: 1014.9, segment: "cur" }),
+    point({ eventId: "m:3", order: 3, playerId: 2, r: 1001.2, segment: "cur" }),
+  ]);
+  const overlay = currentSegmentOverlay(rows, "cur");
+  const est = estimatedLineValues(
+    displayRatingRows(rows),
+    overlay.estimatedKeys,
+    overlay.anchorKey
+  );
+
+  it("预估行含未参赛者的沿用值：缺席场次平线贯穿，不为 undefined 断线", () => {
+    expect(overlay.estimatedKeys).toEqual(new Set(["m:2", "m:3"]));
+    expect(est.get("m:2")).toEqual({ 1: 1015 });
+    // 1 在 m:3 缺席，但沿用 1015 平线；2 参赛按本场值
+    expect(est.get("m:3")).toEqual({ 1: 1015, 2: 1001 });
+  });
+
+  it("锚点行为首个预估行的沿用值键集：虚线从实线停笔处接续", () => {
+    expect(overlay.anchorKey).toBe("f:1");
+    expect(est.get("f:1")).toEqual({ 1: 1012 });
+  });
+
+  it("本周首次参赛者在首个事件前无 est 值（不虚构早期历史）", () => {
+    expect(est.get("f:1")![2]).toBeUndefined();
+    expect(est.get("m:2")![2]).toBeUndefined();
+    expect(est.get("m:3")![2]).toBe(1001);
+  });
+
+  it("非预估非锚点行为 {}；映射覆盖每行", () => {
+    expect(est.get("m:1")).toEqual({});
+    expect(est.size).toBe(rows.length);
+  });
+
+  it("排名模式同样平线（值为并列名次）", () => {
+    const estRanks = estimatedLineValues(
+      displayRankRows(rows),
+      overlay.estimatedKeys,
+      overlay.anchorKey
+    );
+    expect(estRanks.get("m:3")).toEqual({ 1: 1, 2: 2 });
+    expect(estRanks.get("f:1")).toEqual({ 1: 1 });
+    expect(estRanks.get("m:1")).toEqual({});
+  });
+
+  it("无预估行时返回空 Map", () => {
+    const empty = currentSegmentOverlay(rows, "seg:nonexistent");
+    expect(
+      estimatedLineValues(
+        displayRatingRows(rows),
+        empty.estimatedKeys,
+        empty.anchorKey
+      ).size
+    ).toBe(0);
+  });
+
+  it("合成「现在」行（T10）作为预估行：整行沿用值平接到今天", () => {
+    const withNow = appendCurrentEstimateRow(rows, {
+      values: { 1: 1015, 2: 1001 },
+      currentSegmentId: "cur",
+      now: "2026-10-04T12:00:00.000Z",
+    });
+    const overlayNow = currentSegmentOverlay(withNow, "cur");
+    const estNow = estimatedLineValues(
+      displayRatingRows(withNow),
+      overlayNow.estimatedKeys,
+      overlayNow.anchorKey
+    );
+    expect(estNow.get(`${CURRENT_ESTIMATE_ROW_KEY}cur`)).toEqual({
+      1: 1015,
+      2: 1001,
+    });
+    // 锚点仍补首个预估行（m:2）键集：1 在 f:1 的沿用值
+    expect(estNow.get("f:1")).toEqual({ 1: 1012 });
   });
 });
