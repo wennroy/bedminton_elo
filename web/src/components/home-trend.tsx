@@ -935,6 +935,8 @@ function Glicko2Trend({
                     />
                     {selectedPlayers.map((p) => (
                       <React.Fragment key={p.id}>
+                        {/* 入场动画缩短至 ~400ms：默认 1500ms 在多人曲线上像「计算中」，
+                            且 ResponsiveContainer 重播会造成反复。 */}
                         <Line
                           type="monotone"
                           dataKey={String(p.id)}
@@ -943,6 +945,7 @@ function Glicko2Trend({
                           strokeWidth={selectedPlayers.length === 1 ? 3 : 2}
                           dot={false}
                           activeDot={{ r: 3 }}
+                          animationDuration={400}
                         />
                         <Line
                           type="monotone"
@@ -953,6 +956,7 @@ function Glicko2Trend({
                           strokeDasharray="5 4"
                           dot={false}
                           activeDot={{ r: 3 }}
+                          animationDuration={400}
                         />
                       </React.Fragment>
                     ))}

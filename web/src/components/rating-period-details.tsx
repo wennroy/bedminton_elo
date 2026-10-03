@@ -1,12 +1,14 @@
 import type { RatingViewWeekSegment } from "@/lib/ratings/view-types";
 import { formatTrendSeasonLabel } from "@/lib/ratings/chart-data";
+import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
  * 个人周评分明细（glicko2 只读展示）：消费 view.weekSegments，
  * 按周区段列出该球员的逐场 Estimated、段末 Final/周校准与赛季重置。
  * Final 不摊到各场——逐场只显示单场预估，校准与重置是独立事件行。
- * 纯展示组件：数据全部来自服务端投影，不在此处结算。
+ * 纯展示组件：数据全部来自服务端投影，不在此处结算；
+ * 默认整体收起（原生 details/summary，无 JS），收起时摘要一行 Final/本周合计。
  */
 
 /** 该球员在某场比赛的事实（阵容/比分/胜负），由页面按 matchId 传入。 */
@@ -78,22 +80,63 @@ export function RatingPeriodDetails({
   const pillClass =
     "inline-flex items-center rounded-[5px] px-[7px] py-1 text-[10px] font-bold";
 
+  // 收起态摘要：最近一个已结算段的 Final + 进行中段的本周合计净变化。
+  const newestFirst = [...relevant].reverse();
+  const latestFinal = newestFirst
+    .map((segment) => finalBySegment[segment.segmentId])
+    .find((final) => final !== undefined);
+  const currentSegment = newestFirst.find(
+    (segment) => segment.correction[key] === undefined
+  );
+  const currentNet = currentSegment
+    ? currentSegment.matches.reduce(
+        (sum, estimate) =>
+          sum +
+          Math.round(
+            estimate.changes.find((c) => c.playerId === playerId)?.delta ?? 0
+          ),
+        0
+      )
+    : null;
+  const summaryLine = [
+    latestFinal !== undefined ? `Final ${latestFinal}` : null,
+    currentNet !== null
+      ? `本周合计 ${formatDelta(currentNet)}（进行中）`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
     <section className="overflow-hidden rounded-2xl border border-border bg-card">
-      <div className="px-[18px] pt-[19px] min-[761px]:px-[25px] min-[761px]:pt-[22px]">
-        <h2 className="text-lg font-bold text-card-foreground max-[760px]:text-[15px]">
-          周评分明细
-        </h2>
-        <div className="mt-[3px] text-[9px] font-bold tracking-[1.5px] text-muted-foreground">
-          RATING PERIODS
-        </div>
-        <p className="mt-2 text-[11px] leading-[1.7] text-muted-foreground">
+      {/* 原生 details：键盘可及（Enter/Space 切换），默认收起无动画依赖。 */}
+      <details className="group">
+        <summary className="block cursor-pointer list-none px-[18px] pt-[19px] min-[761px]:px-[25px] min-[761px]:pt-[22px] [&::-webkit-details-marker]:hidden">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-lg font-bold text-card-foreground max-[760px]:text-[15px]">
+                周评分明细
+              </h2>
+              <div className="mt-[3px] text-[9px] font-bold tracking-[1.5px] text-muted-foreground">
+                RATING PERIODS
+              </div>
+            </div>
+            <ChevronDown
+              aria-hidden="true"
+              className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
+            />
+          </div>
+          <p className="mt-2 font-num text-[11px] leading-[1.7] text-muted-foreground">
+            {summaryLine || "展开查看逐场预估与正式结算"}
+          </p>
+        </summary>
+
+        <p className="mt-2 px-[18px] text-[11px] leading-[1.7] text-muted-foreground min-[761px]:px-[25px]">
           逐场为 Estimated 预估；周一正式结算给出 Final 与校准（可能上调或下调）；赛季重置单列，不计入比赛表现。
         </p>
-      </div>
 
       <div className="mt-[18px]">
-        {[...relevant].reverse().map((segment) => {
+        {newestFirst.map((segment) => {
           const isCurrent = segment.correction[key] === undefined;
           const matchRows = segment.matches
             .map((estimate) => ({
@@ -136,6 +179,12 @@ export function RatingPeriodDetails({
                   {isCurrent ? "进行中" : "已结算"}
                 </span>
               </div>
+              {/* 已结算段：逐场数字永远是单场预估，不摊 Final——去徽标、加一句口径说明。 */}
+              {isCurrent ? null : (
+                <p className="mt-1 text-[10px] leading-snug text-muted-foreground">
+                  逐场为单场预估，正式结果见校准与 Final 行。
+                </p>
+              )}
 
               <div className="mt-3 space-y-2 text-[11px]">
                 {matchRows.map(({ estimate, change }) => {
@@ -164,9 +213,12 @@ export function RatingPeriodDetails({
                         )}
                       </span>
                       <span className="flex items-center gap-2">
-                        <span className="rounded-[4px] bg-secondary px-1.5 py-0.5 text-[9px] font-bold text-muted-foreground">
-                          预估
-                        </span>
+                        {/* 「预估」徽标仅保留给进行中段；已结算段的逐场口径由段头说明。 */}
+                        {isCurrent ? (
+                          <span className="rounded-[4px] bg-secondary px-1.5 py-0.5 text-[9px] font-bold text-muted-foreground">
+                            预估
+                          </span>
+                        ) : null}
                         <span className={deltaClass(delta)}>
                           {formatDelta(delta)}
                         </span>
@@ -246,6 +298,7 @@ export function RatingPeriodDetails({
           );
         })}
       </div>
+      </details>
     </section>
   );
 }

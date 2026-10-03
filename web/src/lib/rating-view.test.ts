@@ -402,7 +402,6 @@ describe("rating-status 状态映射", () => {
     expect(banner.title).toBe("新版评分运行中");
     expect(banner.meta).toContain(`更新于 ${formatStatusInstant(AS_OF_WEEK)}`);
     expect(banner.detail).toBeNull();
-    expect(banner.showLegend).toBe(true);
   });
 
   it("stale：显示最后成功时点，不冒充当前时刻", () => {
@@ -432,7 +431,6 @@ describe("rating-status 状态映射", () => {
     );
     expect(banner.detail).toContain("最后成功");
     expect(banner.meta).toContain("最后成功");
-    expect(banner.showLegend).toBe(true);
   });
 
   it("unavailable（配置未初始化）：显示原因，不附状态说明", () => {
@@ -444,7 +442,6 @@ describe("rating-status 状态映射", () => {
     expect(banner.title).toBe("新版评分暂不可用");
     expect(banner.detail).toContain("rating config not initialized");
     expect(banner.meta).toBeNull();
-    expect(banner.showLegend).toBe(false);
   });
 
   it("Estimated/Final/未评级 说明各不相同且覆盖三种状态", () => {

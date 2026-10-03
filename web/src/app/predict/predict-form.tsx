@@ -498,7 +498,8 @@ function GlickoPredictResult({
       <div className="flex items-baseline justify-between gap-2">
         <h2 className="text-sm font-semibold">预测评分变化</h2>
         <span className="text-[10px] text-muted-foreground">
-          新版 · Estimated 预估 · 模型 {version}
+          {/* 版本全串留在 API/指纹，UI 只显首段。 */}
+          新版 · Estimated 预估 · 模型 {version.split("|")[0]}
         </span>
       </div>
       <div className="mt-[22px] grid grid-cols-[minmax(0,1fr)_1px_minmax(0,1fr)] gap-[10px]">

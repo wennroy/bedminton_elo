@@ -288,7 +288,8 @@ function ScheduleMetaLine({ result }: { result: ScheduleResult }) {
   if (result.model === "glicko2") {
     return (
       <p className="text-[10px] text-muted-foreground">
-        新版评分 · 模型 {result.configVersion ?? "?"}
+        {/* 版本全串留在 API/指纹，UI 只显首段。 */}
+        新版评分 · 模型 {(result.configVersion ?? "?").split("|")[0]}
         {result.asOf ? ` · 评分时点 ${formatStatusInstant(result.asOf)}` : ""}
       </p>
     );

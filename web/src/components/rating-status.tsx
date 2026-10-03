@@ -56,8 +56,6 @@ export interface RatingStatusBanner {
   detail: string | null;
   /** 版本与更新时点行；unavailable 为 null。 */
   meta: string | null;
-  /** 是否附 Estimated/Final/未评级说明。 */
-  showLegend: boolean;
 }
 
 /** 新版评分三态 → 状态条文案；legacy 返回 null（不显示新版状态）。 */
@@ -71,7 +69,6 @@ export function ratingStatusBanner(
       title: "新版评分暂不可用",
       detail: input.reason,
       meta: null,
-      showLegend: false,
     };
   }
   if (input.freshness === "fresh") {
@@ -79,8 +76,8 @@ export function ratingStatusBanner(
       tone: "ok",
       title: "新版评分运行中",
       detail: null,
-      meta: `模型 ${input.version} · 更新于 ${formatStatusInstant(input.asOf)}`,
-      showLegend: true,
+      // 版本全串（含引擎参数指纹）留在 API/ETag，UI 只显首段。
+      meta: `模型 ${input.version.split("|")[0]} · 更新于 ${formatStatusInstant(input.asOf)}`,
     };
   }
   // stale：asOf 已如实为最后成功时点，不冒充当前。
@@ -89,8 +86,8 @@ export function ratingStatusBanner(
     tone: "warn",
     title: "新版评分暂未更新",
     detail: `以上为 ${at} 最后成功结算的结果；评分恢复后会自动更新。`,
-    meta: `模型 ${input.version} · 最后成功 ${at}`,
-    showLegend: true,
+    // 版本全串（含引擎参数指纹）留在 API/ETag，UI 只显首段。
+    meta: `模型 ${input.version.split("|")[0]} · 最后成功 ${at}`,
   };
 }
 
@@ -126,8 +123,14 @@ const toneClass: Record<RatingStatusBanner["tone"], string> = {
   error: "border-loss bg-loss-bg",
 };
 
-/** 新版评分状态条：fresh 正常 / stale 旧快照 / unavailable 显示原因；legacy 不渲染。 */
-export function RatingStatus(input: RatingStatusInput) {
+/**
+ * 新版评分状态条：fresh 正常 / stale 旧快照 / unavailable 显示原因；legacy 不渲染。
+ * showLegend：是否附 Estimated/Final/未评级三行说明（默认 false，仅首页传入）。
+ */
+export function RatingStatus({
+  showLegend = false,
+  ...input
+}: RatingStatusInput & { showLegend?: boolean }) {
   const banner = ratingStatusBanner(input);
   if (banner === null) return null;
 
@@ -159,7 +162,9 @@ export function RatingStatus(input: RatingStatusInput) {
       {banner.detail ? (
         <p className="mt-1.5 text-muted-foreground">{banner.detail}</p>
       ) : null}
-      {banner.showLegend ? (
+      {showLegend &&
+      input.model === "glicko2" &&
+      input.freshness !== "unavailable" ? (
         <ul className="mt-2.5 space-y-1.5 border-t border-border pt-2.5">
           {RATING_STATUS_EXPLAINERS.map((item) => (
             <li key={item.status} className="flex gap-2">
