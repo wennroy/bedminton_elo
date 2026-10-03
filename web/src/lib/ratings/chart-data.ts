@@ -274,3 +274,44 @@ export function currentSegmentOverlay(
       : undefined;
   return { estimatedKeys, anchorKey };
 }
+
+/**
+ * 当前区段预估虚线（`:est`）的逐行取值：虚线是每人「本周预估」的连续线——
+ * 参赛场次按本场值、缺席场次沿用最近分值平线贯穿（与 displayRatingRows/
+ * displayRankRows 的沿用口径、读数栏「缺席沿用最近分值」一致），Recharts
+ * 不因 undefined 断线。
+ *
+ * - 预估行（estimatedKeys 含该行 key）：整行 `{...row.values}`——display 行
+ *   已把沿用值带进 values，参赛与未参赛者都有；
+ * - 锚点行（anchorKey）：只取首个预估行 values 的键集在锚点行的沿用值，让
+ *   虚线从实线停笔处接续不断线；本周首次参赛者在锚点行无沿用值自然跳过
+ *   （不虚构早期历史，其虚线从首个事件才开始）；
+ * - 其他行：`{}`（实线行不掺 `:est`）。
+ *
+ * 没有预估行时返回空 Map（无锚点可接）。不改输入数组与行。
+ */
+export function estimatedLineValues(
+  rows: readonly DisplayTrendRow[],
+  estimatedKeys: ReadonlySet<string>,
+  anchorKey: string | undefined
+): Map<string, Record<number, number>> {
+  const byRowKey = new Map<string, Record<number, number>>();
+  const firstEstimated = rows.find((row) => estimatedKeys.has(row.key));
+  if (firstEstimated === undefined) return byRowKey;
+  const anchorIds = Object.keys(firstEstimated.values).map(Number);
+  for (const row of rows) {
+    if (estimatedKeys.has(row.key)) {
+      byRowKey.set(row.key, { ...row.values });
+    } else if (row.key === anchorKey) {
+      const values: Record<number, number> = {};
+      for (const playerId of anchorIds) {
+        const value = row.values[playerId];
+        if (value !== undefined) values[playerId] = value;
+      }
+      byRowKey.set(row.key, values);
+    } else {
+      byRowKey.set(row.key, {});
+    }
+  }
+  return byRowKey;
+}

@@ -23,6 +23,7 @@ import {
   currentSegmentOverlay,
   displayRankRows,
   displayRatingRows,
+  estimatedLineValues,
   eventLocalDate,
   formatTrendSeasonLabel,
   listTrendSeasons,
@@ -745,52 +746,43 @@ function Glicko2Trend({
     [rows, currentSegmentId]
   );
 
-  // 当前区段内有预估点的球员（锚点行只为这些球员补虚线起点）
-  const estimatedPlayerIds = React.useMemo(() => {
-    const ids = new Set<number>();
-    for (const row of rows) {
-      if (estimatedKeys.has(row.key)) {
-        for (const playerId of Object.keys(row.r)) ids.add(Number(playerId));
-      }
-    }
-    return ids;
-  }, [rows, estimatedKeys]);
+  // 虚线（`:est`）逐行取值：预估行整行沿用值（缺席场次平线贯穿当前区段），
+  // 锚点行只为首个预估行已有沿用值的球员补起点，让虚线从实线停笔处接续。
+  const estByRowKey = React.useMemo(
+    () => estimatedLineValues(displayRows, estimatedKeys, anchorKey),
+    [displayRows, estimatedKeys, anchorKey]
+  );
 
   const rowByKey = React.useMemo(
     () => new Map(rows.map((row) => [row.key, row])),
     [rows]
   );
 
-  // Recharts 行：key = 事件 ID（同刻两事件不合并）；预估行只留 `:est`
-  // 虚线值（实线 undefined 即停笔）；锚点行带 `:est` 起点让虚线不断线。
+  // Recharts 行：key = 事件 ID（同刻两事件不合并）；实线行只留正式值（预估行
+  // 实线 undefined 即停笔）；`:est` = 当前区段每人「本周预估」连续虚线——参赛
+  // 场次按本场值、缺席场次沿用最近分值平线（tooltip 数据仍走 row.matchDeltas）。
   const chartData = React.useMemo(
     () =>
       displayRows.map((row) => {
-        const estimatedRow = estimatedKeys.has(row.key);
         const obj: Record<string, number | string> = {
           key: row.key,
           kind: row.kind,
           label: shortDate(eventLocalDate(row.at)),
         };
-        if (!estimatedRow) {
+        if (!estimatedKeys.has(row.key)) {
           for (const [playerId, value] of Object.entries(row.values)) {
             obj[playerId] = value;
           }
         }
-        if (estimatedRow) {
-          for (const playerId of Object.keys(row.r)) {
-            const value = row.values[Number(playerId)];
-            if (value !== undefined) obj[`${playerId}:est`] = value;
-          }
-        } else if (row.key === anchorKey) {
-          for (const playerId of estimatedPlayerIds) {
-            const value = row.values[playerId];
-            if (value !== undefined) obj[`${playerId}:est`] = value;
+        const estValues = estByRowKey.get(row.key);
+        if (estValues) {
+          for (const [playerId, value] of Object.entries(estValues)) {
+            obj[`${playerId}:est`] = value;
           }
         }
         return obj;
       }),
-    [displayRows, estimatedKeys, anchorKey, estimatedPlayerIds]
+    [displayRows, estimatedKeys, estByRowKey]
   );
 
   const maxRank = React.useMemo(
