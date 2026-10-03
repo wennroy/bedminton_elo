@@ -366,7 +366,8 @@ function RatingReportSection({ report }: { report: WeeklyRatingReport }) {
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-lg font-bold text-foreground">评分变化</h2>
         <span className="text-[10px] text-muted-foreground">
-          新版 Glicko-2 · 模型 {report.version}
+          {/* 版本全串留在 API/指纹，UI 只显首段（与 OG 分享图一致）。 */}
+          新版 Glicko-2 · 模型 {report.version.split("|")[0]}
           {report.freshness === "stale"
             ? " · 以上为最后成功结算的结果，恢复后自动更新"
             : ""}

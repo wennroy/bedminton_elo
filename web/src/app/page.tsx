@@ -121,7 +121,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <RatingStatus {...toRatingStatusInput(result)} />
+          {/* 三行状态说明信息密度高，仅首页展开；其余页面用默认 false。 */}
+          <RatingStatus {...toRatingStatusInput(result)} showLegend />
         </div>
         <RatingModeControl current={result.model} />
       </div>

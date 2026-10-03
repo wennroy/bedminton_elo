@@ -614,6 +614,7 @@ function Glicko2PlayerTrend({
                     strokeOpacity: 0.55,
                   }}
                 />
+                {/* 入场动画缩短至 ~400ms，与首页大图一致；默认 1500ms 在手机上像「计算中」。 */}
                 <Line
                   type="monotone"
                   dataKey="final"
@@ -627,6 +628,7 @@ function Glicko2PlayerTrend({
                     strokeWidth: 2,
                   }}
                   activeDot={{ r: 4 }}
+                  animationDuration={400}
                 />
                 <Line
                   type="monotone"
@@ -637,6 +639,7 @@ function Glicko2PlayerTrend({
                   strokeDasharray="5 4"
                   dot={false}
                   activeDot={{ r: 4 }}
+                  animationDuration={400}
                 />
               </LineChart>
             </ResponsiveContainer>
