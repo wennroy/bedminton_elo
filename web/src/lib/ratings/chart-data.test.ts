@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { projectRatingView } from "./projections";
 import { replayRatings } from "./replay";
 import {
+  appendCurrentEstimateRow,
   buildTrendRows,
   currentSegmentOverlay,
   displayRankRows,
@@ -9,6 +10,7 @@ import {
   eventLocalDate,
   formatTrendSeasonLabel,
   listTrendSeasons,
+  CURRENT_ESTIMATE_ROW_KEY,
 } from "./chart-data";
 import type { RatingViewPoint } from "./view-types";
 import { replayConfig, replayMatch } from "../../../test/fixtures/ratings-scenarios";
@@ -135,6 +137,34 @@ describe("buildTrendRows", () => {
     expect(rows.find((row) => row.kind === "season_reset")!.resetDeltas).toEqual(
       {}
     );
+  });
+
+  it("match_estimated 行附逐场每球员变化（取整）；其他 kind 为 {}", () => {
+    const view = crossSeasonView();
+    const rows = buildTrendRows(view.points, view.weekSegments);
+    const estimatesById = new Map(
+      view.weekSegments.flatMap((s) => s.matches).map((m) => [m.eventId, m])
+    );
+    for (const row of rows) {
+      if (row.kind === "match_estimated") {
+        const estimate = estimatesById.get(row.key)!;
+        expect(row.matchDeltas).toEqual(
+          Object.fromEntries(
+            estimate.changes.map((c) => [c.playerId, Math.round(c.delta)])
+          )
+        );
+      } else {
+        expect(row.matchDeltas).toEqual({});
+      }
+    }
+  });
+
+  it("不传 segments 时 match_estimated 行的 matchDeltas 为 {}", () => {
+    const view = crossSeasonView();
+    const rows = buildTrendRows(view.points);
+    expect(
+      rows.find((row) => row.kind === "match_estimated")!.matchDeltas
+    ).toEqual({});
   });
 });
 
@@ -269,5 +299,82 @@ describe("currentSegmentOverlay", () => {
     const { estimatedKeys, anchorKey } = currentSegmentOverlay(rows, "cur");
     expect(estimatedKeys).toEqual(new Set(["m:1", "m:2"]));
     expect(anchorKey).toBeUndefined();
+  });
+});
+
+describe("appendCurrentEstimateRow", () => {
+  const NOW = "2026-10-04T12:00:00.000Z";
+  const baseRows = buildTrendRows([
+    point({ eventId: "m:1", order: 0, playerId: 1, r: 1009.6 }),
+    point({
+      eventId: "f:1",
+      order: 1,
+      kind: "weekly_final",
+      at: "2026-09-28T16:00:00Z",
+      playerId: 1,
+      r: 1012.2,
+      status: "final",
+    }),
+  ]);
+
+  it("追加合成现在行：kind/segment/at/order/r 正确，deltas 为空", () => {
+    const rows = appendCurrentEstimateRow(baseRows, {
+      values: { 1: 1012, 2: 998 },
+      currentSegmentId: "seg:cur",
+      now: NOW,
+    });
+    expect(rows.length).toBe(baseRows.length + 1);
+    const nowRow = rows.at(-1)!;
+    expect(nowRow.key).toBe(`${CURRENT_ESTIMATE_ROW_KEY}seg:cur`);
+    expect(nowRow.kind).toBe("match_estimated");
+    expect(nowRow.segment).toBe("seg:cur");
+    expect(nowRow.at).toBe(NOW);
+    expect(nowRow.order).toBe(baseRows.at(-1)!.order + 1);
+    expect(nowRow.r).toEqual({ 1: 1012, 2: 998 });
+    expect(nowRow.correction).toEqual({});
+    expect(nowRow.resetDeltas).toEqual({});
+    expect(nowRow.matchDeltas).toEqual({});
+    // 展示层函数照常消费：现在行进入沿用口径（与排行榜同口径取整分）
+    expect(displayRatingRows(rows).at(-1)!.values).toEqual({ 1: 1012, 2: 998 });
+  });
+
+  it("零比赛周平接：现在行是当前区段唯一预估行，锚点为最后一个正式行", () => {
+    const rows = appendCurrentEstimateRow(baseRows, {
+      values: { 1: 1012 },
+      currentSegmentId: "seg:cur",
+      now: NOW,
+    });
+    const { estimatedKeys, anchorKey } = currentSegmentOverlay(rows, "seg:cur");
+    expect(estimatedKeys).toEqual(new Set([`${CURRENT_ESTIMATE_ROW_KEY}seg:cur`]));
+    expect(anchorKey).toBe("f:1");
+  });
+
+  it("空 rows 或空 values 不追加", () => {
+    expect(
+      appendCurrentEstimateRow([], {
+        values: { 1: 1000 },
+        currentSegmentId: "seg:cur",
+        now: NOW,
+      })
+    ).toEqual([]);
+    expect(
+      appendCurrentEstimateRow(baseRows, {
+        values: {},
+        currentSegmentId: "seg:cur",
+        now: NOW,
+      })
+    ).toEqual(baseRows);
+  });
+
+  it("不改输入数组（不可变）", () => {
+    const frozen = Object.freeze([...baseRows]);
+    const before = [...baseRows];
+    appendCurrentEstimateRow(frozen, {
+      values: { 1: 1012 },
+      currentSegmentId: "seg:cur",
+      now: NOW,
+    });
+    expect(baseRows).toEqual(before);
+    expect(frozen).toEqual(before);
   });
 });

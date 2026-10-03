@@ -15,6 +15,7 @@ import {
 import type { PlayerMatchRecord } from "@/lib/stats";
 import type { RatingView } from "@/lib/ratings/view-types";
 import {
+  appendCurrentEstimateRow,
   buildTrendRows,
   currentSegmentOverlay,
   displayRatingRows,
@@ -46,6 +47,8 @@ export type PlayerTrendProps =
       playerId: number;
       view: RatingView;
       currentSegmentId: string;
+      /** 服务端注入的当前时点（result.asOf；stale 时如实为旧成功时点）。 */
+      now: string;
     };
 
 export function PlayerTrend(props: PlayerTrendProps) {
@@ -365,7 +368,7 @@ export function RecentForm({
   );
 }
 
-/** 个人曲线 tooltip：周正式结算给校准、季重置给重置增量；逐场预估随读数。 */
+/** 个人曲线 tooltip：周正式结算给校准、季重置给重置增量、逐场预估给该场变化。 */
 function PlayerEventTooltip({
   active,
   row,
@@ -384,6 +387,23 @@ function PlayerEventTooltip({
   const formatDelta = (delta: number) =>
     delta > 0 ? `+${delta}` : `${delta}`;
 
+  if (row.kind === "match_estimated") {
+    // 逐场预估：该场本人的单场变化；合成「现在」平接行的 matchDeltas
+    // 为空，自然不弹。
+    const delta = row.matchDeltas[playerId];
+    if (delta === undefined) return null;
+    return (
+      <div className="rounded-lg border border-border bg-card px-3 py-2 text-[11px] shadow-md">
+        <div className="mb-1 font-bold text-card-foreground">
+          单场预估 · 变化
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <span className="text-muted-foreground">该场变化</span>
+          <span className={deltaClass(delta)}>{formatDelta(delta)}</span>
+        </div>
+      </div>
+    );
+  }
   if (row.kind === "weekly_final") {
     const correction = row.correction[playerId];
     if (correction === undefined) return null;
@@ -426,24 +446,38 @@ function Glicko2PlayerTrend({
   playerId,
   view,
   currentSegmentId,
+  now,
 }: {
   playerName: string;
   playerId: number;
   view: RatingView;
   currentSegmentId: string;
+  now: string;
 }) {
   const [range, setRange] = React.useState<RangeKey>("4");
   const [readoutKey, setReadoutKey] = React.useState<string | null>(null);
 
-  const rows = React.useMemo(
-    () =>
-      displayRatingRows(buildTrendRows(view.points, view.weekSegments)).filter(
-        // 只保留该球员自身有事件的行（逐场参赛/周 Final/季重置）；
-        // 缺席间隔由连线沿用，不为别人的比赛造平点。
-        (row) => row.r[playerId] !== undefined
-      ),
-    [view.points, view.weekSegments, playerId]
-  );
+  const rows = React.useMemo(() => {
+    // 虚线总是平接到今天：追加合成「现在」行（值仅含本球员的当前展示分，
+    // 自己本周没打也从最后事件延伸到今天；未评级者不追加）。
+    const base = buildTrendRows(view.points, view.weekSegments);
+    const displayRating = view.players.find(
+      (p) => p.playerId === playerId
+    )?.displayRating;
+    const withNow =
+      displayRating === null || displayRating === undefined
+        ? base
+        : appendCurrentEstimateRow(base, {
+            values: { [playerId]: displayRating },
+            currentSegmentId,
+            now,
+          });
+    return displayRatingRows(withNow).filter(
+      // 只保留该球员自身有事件的行（逐场参赛/周 Final/季重置/合成现在行）；
+      // 缺席间隔由连线沿用，不为别人的比赛造平点。
+      (row) => row.r[playerId] !== undefined
+    );
+  }, [view.points, view.weekSegments, view.players, playerId, currentSegmentId, now]);
   const rowByKey = React.useMemo(
     () => new Map(rows.map((row) => [row.key, row])),
     [rows]
@@ -489,6 +523,11 @@ function Glicko2PlayerTrend({
   const shown =
     (readoutKey !== null && rowByKey.get(readoutKey)) || latest || null;
   const shownValue = shown ? shown.values[playerId] : undefined;
+  // 逐场预估行：读数行在分值后同步该场 +N/-N（手机读数可见）。
+  const shownMatchDelta =
+    shown?.kind === "match_estimated"
+      ? shown.matchDeltas[playerId]
+      : undefined;
 
   return (
     <section className="min-w-0 rounded-2xl border border-border bg-card p-5 min-[761px]:p-[25px]">
@@ -546,17 +585,34 @@ function Glicko2PlayerTrend({
               </span>
             </span>
             <span aria-live="polite">
-              {shown && shownValue !== undefined
-                ? `${shortDate(eventLocalDate(shown.at))} · 评分 ${shownValue}${
-                    shown.kind === "match_estimated"
-                      ? shown.segment === currentSegmentId
-                        ? " · 预估"
-                        : " · 历史预估"
-                      : shown.kind === "season_reset"
-                        ? " · 重置"
-                        : " · 正式"
-                  }`
-                : "—"}
+              {shown && shownValue !== undefined ? (
+                <>
+                  {`${shortDate(eventLocalDate(shown.at))} · 评分 ${shownValue}`}
+                  {shownMatchDelta !== undefined && (
+                    <small
+                      className={cn(
+                        "font-num",
+                        shownMatchDelta > 0
+                          ? "text-win"
+                          : shownMatchDelta < 0
+                            ? "text-loss"
+                            : "text-muted-foreground"
+                      )}
+                    >
+                      {` ${shownMatchDelta > 0 ? "+" : ""}${shownMatchDelta}`}
+                    </small>
+                  )}
+                  {shown.kind === "match_estimated"
+                    ? shown.segment === currentSegmentId
+                      ? " · 预估"
+                      : " · 历史预估"
+                    : shown.kind === "season_reset"
+                      ? " · 重置"
+                      : " · 正式"}
+                </>
+              ) : (
+                "—"
+              )}
             </span>
           </div>
           <div className="h-[215px] min-[1600px]:h-[260px]">

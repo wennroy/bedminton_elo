@@ -32,6 +32,8 @@ export interface TrendRow {
   correction: Record<number, number>;
   /** season_reset：每球员重置增量（展示取整）；其他 kind 为 {}。 */
   resetDeltas: Record<number, number>;
+  /** match_estimated：该场每球员单场预估变化（展示取整）；其他 kind 为 {}。 */
+  matchDeltas: Record<number, number>;
 }
 
 export interface BuildTrendRowsOptions {
@@ -44,8 +46,8 @@ export interface BuildTrendRowsOptions {
 
 /**
  * 把投影点整理成按事件分组的图表行（order 升序）。
- * 传入 weekSegments 时给 weekly_final 行附周校准、season_reset 行附重置增量，
- * 供独立 tooltip 使用。
+ * 传入 weekSegments 时给 weekly_final 行附周校准、season_reset 行附重置增量、
+ * match_estimated 行附逐场每球员变化，供独立 tooltip 使用。
  */
 export function buildTrendRows(
   points: readonly RatingViewPoint[],
@@ -62,6 +64,7 @@ export function buildTrendRows(
 
   const correctionBySegment = new Map<string, Record<number, number>>();
   const resetByEventId = new Map<string, Record<number, number>>();
+  const matchDeltasByEventId = new Map<string, Record<number, number>>();
   for (const segment of segments ?? []) {
     const correction: Record<number, number> = {};
     for (const [playerId, value] of Object.entries(segment.correction)) {
@@ -74,6 +77,13 @@ export function buildTrendRows(
         deltas[change.playerId] = Math.round(change.delta);
       }
       resetByEventId.set(segment.reset.eventId, deltas);
+    }
+    for (const match of segment.matches) {
+      const deltas: Record<number, number> = {};
+      for (const change of match.changes) {
+        deltas[change.playerId] = Math.round(change.delta);
+      }
+      matchDeltasByEventId.set(match.eventId, deltas);
     }
   }
 
@@ -96,12 +106,63 @@ export function buildTrendRows(
           point.kind === "season_reset"
             ? (resetByEventId.get(point.eventId) ?? {})
             : {},
+        matchDeltas:
+          point.kind === "match_estimated"
+            ? (matchDeltasByEventId.get(point.eventId) ?? {})
+            : {},
       };
       rows.set(point.eventId, row);
     }
     row.r[point.playerId] = point.r;
   }
   return [...rows.values()].sort((a, b) => a.order - b.order);
+}
+
+/**
+ * 当前区段（未结算）虚线平接的合成「现在」行的 key 前缀。
+ * replay 事件 eventId 形如 "match_estimated:<段>:<场>"/"weekly_final:<段>"/
+ * "season_reset:<季>"（段/季 ID 只含日期、时间与 ":"），不含 "@"，故不会碰撞。
+ */
+export const CURRENT_ESTIMATE_ROW_KEY = "current-estimate@";
+
+/**
+ * 展示层平接：向行尾追加合成的「现在」行，让当前区段预估虚线总是接到今天
+ * （本周已打时也从最后一场延伸到今天；本周零比赛时从锚点行平接）。
+ * 纯展示合成——不写入投影 DTO、不进 OG/周报/指纹。kind 复用
+ * match_estimated 是为沿用 currentSegmentOverlay 的锚点接续与读数
+ * 「预估」语义（currentSegmentOverlay 不需要改）；matchDeltas 为空，
+ * tooltip 自然不弹出。
+ *
+ * rows 为空（赛季无比赛/全部未评级）或 values 为空（未评级者不出现）
+ * 时不追加。不改输入数组。
+ */
+export function appendCurrentEstimateRow(
+  rows: readonly TrendRow[],
+  options: {
+    /** 与排行榜同口径的当前展示分（key=playerId，displayRating；未评级者不出现）。 */
+    values: Readonly<Record<number, number>>;
+    currentSegmentId: string;
+    /** 服务端注入的当前时点（ISO，stale 时如实为旧成功时点）。 */
+    now: string;
+  }
+): TrendRow[] {
+  const { values, currentSegmentId, now } = options;
+  const last = rows.at(-1);
+  if (last === undefined || Object.keys(values).length === 0) return [...rows];
+  return [
+    ...rows,
+    {
+      key: `${CURRENT_ESTIMATE_ROW_KEY}${currentSegmentId}`,
+      at: now,
+      order: last.order + 1,
+      kind: "match_estimated",
+      segment: currentSegmentId,
+      r: { ...values },
+      correction: {},
+      resetDeltas: {},
+      matchDeltas: {},
+    },
+  ];
 }
 
 /** 图表展示行：values 为每球员展示值（积分=取整分；排名=并列名次）。 */
