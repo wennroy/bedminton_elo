@@ -18,6 +18,7 @@ import { getMyPlayerId } from "@/lib/identity";
 import type { LocalDate } from "@/lib/ratings/types";
 import type { RatingView } from "@/lib/ratings/view-types";
 import {
+  appendCurrentEstimateRow,
   buildTrendRows,
   currentSegmentOverlay,
   displayRankRows,
@@ -54,6 +55,8 @@ export type HomeTrendProps =
       view: RatingView;
       currentSegmentId: string;
       currentSeason: LocalDate | null;
+      /** 服务端注入的当前时点（result.asOf；stale 时如实为旧成功时点）。 */
+      now: string;
       variant?: "compact" | "full";
       ratingQuery?: string;
     };
@@ -577,7 +580,7 @@ function LegacyTrend({
 
 type SeasonKey = "current" | "all" | LocalDate;
 
-/** 校准/重置事件的独立 tooltip：只在这些事件上渲染，不随线变色。 */
+/** 校准/重置/逐场预估事件的独立 tooltip：只在这些事件上渲染，不随线变色。 */
 function TrendEventTooltip({
   active,
   rowKey,
@@ -587,7 +590,7 @@ function TrendEventTooltip({
 }: {
   active?: boolean;
   rowKey?: string | number;
-  rowsByKey: ReadonlyMap<string, { kind: string; correction: Record<number, number>; resetDeltas: Record<number, number> }>;
+  rowsByKey: ReadonlyMap<string, { kind: string; correction: Record<number, number>; resetDeltas: Record<number, number>; matchDeltas: Record<number, number> }>;
   selectedIds: readonly number[];
   nameOf: (id: number) => string;
 }) {
@@ -601,6 +604,25 @@ function TrendEventTooltip({
     );
   const formatDelta = (delta: number) => (delta > 0 ? `+${delta}` : `${delta}`);
 
+  if (row.kind === "match_estimated") {
+    // 逐场预估：只列该场参赛且被勾选的球员；同日多场各自独立点不折叠。
+    // 合成「现在」平接行的 matchDeltas 为空，自然不弹。
+    const entries = selectedIds
+      .map((id) => [id, row.matchDeltas[id]] as const)
+      .filter(([, delta]) => delta !== undefined);
+    if (entries.length === 0) return null;
+    return (
+      <div className="rounded-lg border border-border bg-card px-3 py-2 text-[11px] shadow-md">
+        <div className="mb-1 font-bold text-card-foreground">单场预估 · 变化</div>
+        {entries.map(([id, delta]) => (
+          <div key={id} className="flex items-center justify-between gap-4">
+            <span className="text-muted-foreground">{nameOf(id)}</span>
+            <span className={deltaClass(delta)}>{formatDelta(delta)}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
   if (row.kind === "weekly_final") {
     const entries = selectedIds
       .map((id) => [id, row.correction[id]] as const)
@@ -642,12 +664,14 @@ function Glicko2Trend({
   view,
   currentSegmentId,
   currentSeason,
+  now,
   variant = "full",
   ratingQuery = "",
 }: {
   view: RatingView;
   currentSegmentId: string;
   currentSeason: LocalDate | null;
+  now: string;
   variant?: "compact" | "full";
   ratingQuery?: string;
 }) {
@@ -697,10 +721,19 @@ function Glicko2Trend({
   const seasonFilter =
     seasonKey === "current" ? currentSeason : seasonKey === "all" ? undefined : seasonKey;
 
-  const rows = React.useMemo(
-    () => buildTrendRows(view.points, view.weekSegments, { season: seasonFilter }),
-    [view.points, view.weekSegments, seasonFilter]
-  );
+  const rows = React.useMemo(() => {
+    const base = buildTrendRows(view.points, view.weekSegments, {
+      season: seasonFilter,
+    });
+    // 虚线总是平接到今天：当前季度与全部历史视图在末尾追加合成「现在」行
+    // （值为与排行榜同口径的当前展示分；历史具体季度不追加）。
+    if (seasonKey !== "current" && seasonKey !== "all") return base;
+    const values: Record<number, number> = {};
+    for (const p of view.players) {
+      if (p.displayRating !== null) values[p.playerId] = p.displayRating;
+    }
+    return appendCurrentEstimateRow(base, { values, currentSegmentId, now });
+  }, [view.points, view.weekSegments, view.players, seasonFilter, seasonKey, currentSegmentId, now]);
 
   const ratingRows = React.useMemo(() => displayRatingRows(rows), [rows]);
   const rankRows = React.useMemo(() => displayRankRows(rows), [rows]);
@@ -1007,34 +1040,55 @@ function Glicko2Trend({
             <p className="py-3 text-xs text-muted-foreground">尚未选择成员</p>
           ) : (
             <div className="max-[760px]:grid max-[760px]:grid-cols-2 max-[760px]:gap-x-5">
-              {readoutRows.map(({ player, rank, rating }) => (
-                <Link
-                  key={player.id}
-                  href={`/players/${player.id}${ratingQuery}`}
-                  className="flex items-center gap-[7px] py-[7px] text-[11px] transition-colors hover:text-win"
-                >
-                  <span className="min-w-[13px] font-num text-[10px] text-muted-foreground">
-                    {rank !== undefined ? String(rank).padStart(2, "0") : "—"}
-                  </span>
-                  <span
-                    className="size-[7px] shrink-0 rounded-full"
-                    style={{
-                      background: seriesVar(colorIndexOf.get(player.id) ?? 0),
-                    }}
-                  />
-                  <span className="truncate">
-                    {player.name}
-                    {player.id === myId && (
-                      <small className="ml-1 text-[9px] text-muted-foreground">
-                        我
+              {readoutRows.map(({ player, rank, rating }) => {
+                // 逐场预估行：该场参赛者的分值旁同步该场 +N/-N（手机读数可见）。
+                const matchDelta =
+                  inspectedRow?.kind === "match_estimated"
+                    ? inspectedRow.matchDeltas[player.id]
+                    : undefined;
+                return (
+                  <Link
+                    key={player.id}
+                    href={`/players/${player.id}${ratingQuery}`}
+                    className="flex items-center gap-[7px] py-[7px] text-[11px] transition-colors hover:text-win"
+                  >
+                    <span className="min-w-[13px] font-num text-[10px] text-muted-foreground">
+                      {rank !== undefined ? String(rank).padStart(2, "0") : "—"}
+                    </span>
+                    <span
+                      className="size-[7px] shrink-0 rounded-full"
+                      style={{
+                        background: seriesVar(colorIndexOf.get(player.id) ?? 0),
+                      }}
+                    />
+                    <span className="truncate">
+                      {player.name}
+                      {player.id === myId && (
+                        <small className="ml-1 text-[9px] text-muted-foreground">
+                          我
+                        </small>
+                      )}
+                    </span>
+                    <strong className="ml-auto font-num text-[17px] font-medium">
+                      {rating}
+                    </strong>
+                    {matchDelta !== undefined && (
+                      <small
+                        className={cn(
+                          "font-num text-[10px]",
+                          matchDelta > 0
+                            ? "text-win"
+                            : matchDelta < 0
+                              ? "text-loss"
+                              : "text-muted-foreground"
+                        )}
+                      >
+                        {matchDelta > 0 ? `+${matchDelta}` : matchDelta}
                       </small>
                     )}
-                  </span>
-                  <strong className="ml-auto font-num text-[17px] font-medium">
-                    {rating}
-                  </strong>
-                </Link>
-              ))}
+                  </Link>
+                );
+              })}
             </div>
           )}
         </aside>

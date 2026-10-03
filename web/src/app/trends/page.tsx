@@ -89,6 +89,7 @@ export default async function TrendsPage({ searchParams }: TrendsPageProps) {
           view={result.view}
           currentSegmentId={result.currentSegmentId ?? ""}
           currentSeason={currentSeason}
+          now={result.asOf}
           variant="full"
           ratingQuery={ratingQuery}
         />

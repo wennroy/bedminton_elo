@@ -513,6 +513,7 @@ export default async function PlayerPage({
           playerId={playerId}
           view={view}
           currentSegmentId={result.currentSegmentId ?? ""}
+          now={result.asOf}
         />
         <RecentForm
           matches={records}

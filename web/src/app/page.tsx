@@ -157,6 +157,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           view={result.view}
           currentSegmentId={result.currentSegmentId ?? ""}
           currentSeason={currentSeason}
+          now={result.asOf}
           variant="compact"
           ratingQuery={ratingQuery}
         />
