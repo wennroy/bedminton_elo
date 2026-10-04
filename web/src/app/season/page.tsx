@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { RatingModeControl } from "@/components/rating-mode-control";
 import { readRatingConfig } from "@/lib/rating-config";
-import { quarterStart } from "@/lib/ratings/calendar";
 import type { RatingModel } from "@/lib/ratings/types";
 import {
   buildSeasonPageData,
   loadSeasonRatingParams,
+  normalizeSeasonParam,
   WeeklyRatingUnavailableError,
 } from "@/lib/season";
 import { SeasonView } from "./season-view";
@@ -14,12 +14,6 @@ export const dynamic = "force-dynamic";
 
 interface SeasonPageProps {
   searchParams: Promise<{ season?: string; rating?: string }>;
-}
-
-/** ?season= 归一到季首日期（自然季度起点）；非法/缺省回 null（由数据回退当前季）。 */
-function normalizeSeasonParam(raw: string | undefined): string | null {
-  if (raw === undefined || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
-  return quarterStart(raw);
 }
 
 /** 显式 "glicko2"|"legacy" 优先；非法/缺省回 activeModel（无配置默认 legacy）。 */

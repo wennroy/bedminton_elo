@@ -13,6 +13,7 @@ import {
   computeSeasonStats,
   listSeasonIds,
   loadSeasonRatingParams,
+  normalizeSeasonParam,
   WeeklyRatingUnavailableError,
 } from "@/lib/season";
 
@@ -336,5 +337,25 @@ describe("season glicko2 分支", () => {
     expect(() =>
       buildSeasonPageData(null, { asOf: "2026-09-16T12:00:00+08:00", db: getDb() })
     ).toThrow(WeeklyRatingUnavailableError);
+  });
+});
+
+describe("normalizeSeasonParam", () => {
+  it("合法日期归一到季首", () => {
+    expect(normalizeSeasonParam("2026-02-15")).toBe("2026-01-01");
+    expect(normalizeSeasonParam("2026-07-01")).toBe("2026-07-01");
+    expect(normalizeSeasonParam("2026-11-30")).toBe("2026-10-01");
+  });
+
+  it("过正则但非法的日期回 null，不抛异常（复审回归）", () => {
+    expect(normalizeSeasonParam("2026-13-01")).toBeNull();
+    expect(normalizeSeasonParam("2026-02-30")).toBeNull();
+    expect(normalizeSeasonParam("2026-00-10")).toBeNull();
+  });
+
+  it("非日期与缺省回 null", () => {
+    expect(normalizeSeasonParam("garbage")).toBeNull();
+    expect(normalizeSeasonParam("2026-1-1")).toBeNull();
+    expect(normalizeSeasonParam(undefined)).toBeNull();
   });
 });

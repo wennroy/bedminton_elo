@@ -11,7 +11,9 @@ import {
   listTrendSeasons,
 } from "@/lib/ratings/chart-data";
 import {
+  isValidLocalDate,
   nextQuarterStart,
+  quarterStart,
   shanghaiLocalDateFromInstant,
 } from "@/lib/ratings/calendar";
 import { loadRatingView, type LoadRatingViewResult } from "@/lib/rating-view";
@@ -107,6 +109,13 @@ export function loadSeasonRatingParams(db?: Database.Database): SeasonRatingPara
 /** 赛季列表：points 中 season 非空去重倒序（升序来自 listTrendSeasons）。 */
 export function listSeasonIds(view: RatingView): string[] {
   return listTrendSeasons(view.points).reverse();
+}
+
+/** ?season= 归一到季首日期（自然季度起点）；非法/缺省回 null（由数据回退当前季）。 */
+export function normalizeSeasonParam(raw: string | undefined): string | null {
+  if (raw === undefined || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+  if (!isValidLocalDate(raw)) return null;
+  return quarterStart(raw);
 }
 
 /** 下一季首前一日（纯 UTC 数学，不依赖主机时区）。 */
@@ -230,8 +239,8 @@ function computeSeasonRatingRows(
     if (endR === undefined || endR === null) continue;
 
     // 新人 = 全局首个评分事件落在本季（首事件必为逐场预估）：期初不虚构。
-    // 非新人必有季首口径：上季在册球员有 season_reset 点，首季前参赛者
-    // （season 为 null 的点）退化为本季首个 weekly_final。
+    // 非新人必有季首口径：季界对所有在册球员发 season_reset（首季边界
+    // 也不例外，replay.ts resetAtSeasonBoundary），其重置点即期初。
     const isNewcomer = seasonPoints.some(
       (p) => p.playerId === playerId && p.order === firstOrderByPlayer.get(playerId)
     );
