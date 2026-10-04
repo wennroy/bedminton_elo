@@ -18,7 +18,6 @@ import {
   Trophy,
   UserRound,
   ScrollText,
-  BookOpen,
   Shield,
   ChevronsUpDown,
 } from "lucide-react";
@@ -53,7 +52,6 @@ const secondaryNav = [
   { href: "/predict", label: "预测", icon: Target },
   { href: "/me", label: "我的", icon: UserRound },
   { href: "/changelog", label: "更新日志", icon: ScrollText },
-  { href: "/methodology", label: "计分方式", icon: BookOpen },
   { href: "/admin", label: "管理", icon: Shield },
 ];
 

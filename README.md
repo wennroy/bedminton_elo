@@ -128,7 +128,7 @@ sudo systemctl restart apache2
 - 每三个月一个赛季：新赛季开始时分数软重置（900～1100 区间保留，两端超出部分保留 75%），不确定性回升，久未参赛者回到更公平的起跑线。
 - 默认展示的评分模型由服务端配置决定（`web/scripts/rating-config.ts`，持久化在数据库 `meta` 表，重启不丢）；未配置时站点按 Legacy 运行。
 - `/season` 赛季报按自然季度汇总榜单：期初→期末分数涨跌、出勤、战绩王、最佳组合、赛季趣闻，并简介赛季制度（进行中赛季统计截至当天）。
-- `/methodology` 计分方式说明页对照讲解 Glicko-2 与 Legacy ELO 的计算公式和数值示例，并说明 TrueSkill 在前端展示中的角色，方便球友看懂分数的来历。
+- 「新版 / Legacy」开关旁的「计分方式」入口按当前模式分别进入 `/methodology/glicko2` 或 `/methodology/legacy`：两页各自讲解对应体系的计算公式和数值示例，Legacy 页同时说明 TrueSkill 在前端展示中的角色，方便球友看懂分数的来历。
 
 ## legacy/ 目录说明
 
