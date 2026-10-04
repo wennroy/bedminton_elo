@@ -66,14 +66,17 @@ const pageTitles: [RegExp, string][] = [
   [/^\/weekly/, "周报"],
   [/^\/season/, "赛季报"],
   [/^\/predict/, "预测"],
-  [/^\/me/, "我的"],
+  [/^\/me\/?$/, "我的"],
   [/^\/changelog/, "更新日志"],
   [/^\/methodology/, "计分方式"],
   [/^\/admin/, "管理"],
 ];
 
 function isActive(pathname: string, href: string) {
-  return href === "/" ? pathname === "/" : pathname.startsWith(href);
+  // 段边界匹配：/me 不能点亮 /methodology；/players/123 仍点亮 /players。
+  return href === "/"
+    ? pathname === "/"
+    : pathname === href || pathname.startsWith(`${href}/`);
 }
 
 function paintTheme(next: Theme, pinMeta: boolean) {
