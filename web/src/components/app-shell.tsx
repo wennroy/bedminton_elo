@@ -15,8 +15,10 @@ import {
   Shuffle,
   Newspaper,
   Target,
+  Trophy,
   UserRound,
   ScrollText,
+  BookOpen,
   Shield,
   ChevronsUpDown,
 } from "lucide-react";
@@ -47,9 +49,11 @@ const primaryNav = [
 const secondaryNav = [
   { href: "/schedule", label: "配对", icon: Shuffle },
   { href: "/weekly", label: "周报", icon: Newspaper },
+  { href: "/season", label: "赛季报", icon: Trophy },
   { href: "/predict", label: "预测", icon: Target },
   { href: "/me", label: "我的", icon: UserRound },
   { href: "/changelog", label: "更新日志", icon: ScrollText },
+  { href: "/methodology", label: "计分方式", icon: BookOpen },
   { href: "/admin", label: "管理", icon: Shield },
 ];
 
@@ -62,9 +66,11 @@ const pageTitles: [RegExp, string][] = [
   [/^\/record/, "记一场比赛"],
   [/^\/schedule/, "配对"],
   [/^\/weekly/, "周报"],
+  [/^\/season/, "赛季报"],
   [/^\/predict/, "预测"],
   [/^\/me/, "我的"],
   [/^\/changelog/, "更新日志"],
+  [/^\/methodology/, "计分方式"],
   [/^\/admin/, "管理"],
 ];
 
