@@ -1,6 +1,5 @@
 import type { LoadRatingViewResult } from "@/lib/rating-view";
 import type { RatingStatus } from "@/lib/ratings/types";
-import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 /** asOf（ISO instant）→ 本地「M月D日 HH:MM」，沿用 components 的本地时间格式化惯例。 */
@@ -166,26 +165,18 @@ export function RatingStatus({
       {showLegend &&
       input.model === "glicko2" &&
       input.freshness !== "unavailable" ? (
-        <div className="mt-2.5 space-y-1.5 border-t border-border pt-2.5">
-          <ul className="space-y-1.5">
-            {RATING_STATUS_EXPLAINERS.map((item) => (
-              <li key={item.status} className="flex gap-2">
-                <span className="shrink-0 font-medium text-card-foreground">
-                  {item.label}
-                </span>
-                <span className="text-muted-foreground">
-                  {item.description}
-                </span>
-              </li>
-            ))}
-          </ul>
-          <Link
-            href="/methodology"
-            className="inline-block text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-          >
-            了解计分方式 →
-          </Link>
-        </div>
+        <ul className="mt-2.5 space-y-1.5 border-t border-border pt-2.5">
+          {RATING_STATUS_EXPLAINERS.map((item) => (
+            <li key={item.status} className="flex gap-2">
+              <span className="shrink-0 font-medium text-card-foreground">
+                {item.label}
+              </span>
+              <span className="text-muted-foreground">
+                {item.description}
+              </span>
+            </li>
+          ))}
+        </ul>
       ) : null}
     </section>
   );

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
+import { BookOpen } from "lucide-react";
 import type { RatingModel } from "@/lib/ratings/types";
 import { cn } from "@/lib/utils";
 
@@ -47,34 +48,46 @@ export function RatingModeControl({ current }: RatingModeControlProps) {
   const searchParams = useSearchParams();
 
   return (
-    <div
-      role="group"
-      aria-label="评分模型"
-      className="inline-flex items-center rounded-lg border border-border bg-card p-0.5"
-    >
-      {RATING_MODEL_OPTIONS.map((option) => {
-        const active = option.value === current;
-        const query = applyRatingParam(
-          searchParams.toString(),
-          option.value
-        );
-        return (
-          <Link
-            key={option.value}
-            href={`${pathname}?${query}`}
-            title={option.title}
-            aria-pressed={active}
-            className={cn(
-              "rounded-[7px] px-2.5 py-1 text-xs font-medium transition-colors",
-              active
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            {option.label}
-          </Link>
-        );
-      })}
+    <div className="flex items-center gap-1.5">
+      <div
+        role="group"
+        aria-label="评分模型"
+        className="inline-flex items-center rounded-lg border border-border bg-card p-0.5"
+      >
+        {RATING_MODEL_OPTIONS.map((option) => {
+          const active = option.value === current;
+          const query = applyRatingParam(
+            searchParams.toString(),
+            option.value
+          );
+          return (
+            <Link
+              key={option.value}
+              href={`${pathname}?${query}`}
+              title={option.title}
+              aria-pressed={active}
+              className={cn(
+                "rounded-[7px] px-2.5 py-1 text-xs font-medium transition-colors",
+                active
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {option.label}
+            </Link>
+          );
+        })}
+      </div>
+      <Link
+        href={
+          current === "glicko2" ? "/methodology/glicko2" : "/methodology/legacy"
+        }
+        title="计分方式说明"
+        className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <BookOpen className="size-3" strokeWidth={1.65} />
+        <span className="hidden min-[761px]:inline">计分方式</span>
+      </Link>
     </div>
   );
 }
