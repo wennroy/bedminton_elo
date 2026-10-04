@@ -292,6 +292,8 @@ export interface SeasonPageData {
   seasons: string[];
   /** asOf 所在区段的赛季（首赛季起点前为 null）。 */
   currentSeasonId: string | null;
+  /** 生效请求季（显式请求 ?? 当前季）：stats 为 null 时供空态如实指名。 */
+  requestedSeasonId: string | null;
   /** 请求赛季的统计；season 不在列表中（含赛季列表为空）时为 null。 */
   stats: SeasonStats | null;
 }
@@ -319,7 +321,7 @@ export function buildSeasonPageData(
     seasonId !== null && seasons.includes(seasonId)
       ? computeSeasonStats(view, seasonId, listPlayers(conn), listMatchesByDate(conn))
       : null;
-  return { seasons, currentSeasonId, stats };
+  return { seasons, currentSeasonId, requestedSeasonId: seasonId, stats };
 }
 
 /**

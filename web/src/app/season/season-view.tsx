@@ -61,7 +61,9 @@ export function SeasonView({ data, params }: SeasonViewProps) {
         </div>
       ) : data.stats === null ? (
         <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
-          未找到 {formatTrendSeasonLabel(selected)} 的赛季数据
+          未找到{" "}
+          {formatTrendSeasonLabel(data.requestedSeasonId ?? selected)}{" "}
+          的赛季数据
         </div>
       ) : (
         <SeasonSections stats={data.stats} params={params} />
