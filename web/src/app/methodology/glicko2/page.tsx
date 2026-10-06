@@ -18,8 +18,7 @@ export default function MethodologyGlicko2Page() {
       </div>
       <p className="text-sm leading-relaxed text-muted-foreground">
         现行主计分是自定义的 Glicko-2
-        双打扩展：周内逐场预估、每周一正式结算，分数自带不确定性。以下按口径、公式和数值示例说明；想看旧版
-        ELO 见页底链接，赛季制度不在本页展开。
+        双打扩展：周内逐场预估、每周一正式结算，分数自带不确定性。旧版 ELO 见页底链接。
       </p>
       <Glicko2Section />
       <section className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-card p-5 min-[761px]:p-[25px]">
