@@ -118,6 +118,21 @@ export function Glicko2Section() {
       </div>
 
       <div className="flex flex-col gap-2">
+        <SubsectionTitle>新人与有效比赛</SubsectionTitle>
+        <ul className="flex flex-col gap-2 text-sm leading-relaxed text-muted-foreground">
+          <li>
+            第一场有效比赛立即计分，没有试用场数：以 1000 / RD 180
+            起步参与更新，赛后即得预估分。RD 180 表示「承认新人实力未知」，新人前几场涨跌偏大是参数使然，不是异常。
+          </li>
+          <li>一直没参赛的成员保持「未评级」：不虚构 1000 分、不进排名。</li>
+          <li>
+            有效比赛：四名互不相同、已在球员目录登记的球员；真实日历日期；比分为不相等的非负整数（没有平局，不限
+            21 分上限）。报名时的「小伙伴」只计入人数，不进比赛、不产生评分。
+          </li>
+        </ul>
+      </div>
+
+      <div className="flex flex-col gap-2">
         <SubsectionTitle>内部坐标</SubsectionTitle>
         <p className="text-sm leading-relaxed text-muted-foreground">
           对外保留 1000 分中心；对内使用适配双打均分的坐标。1/2
@@ -263,9 +278,30 @@ result ∈ {1 胜, 0 负}`}</Formula>
         <SubsectionTitle>停赛、非零和与主榜</SubsectionTitle>
         <ul className="flex flex-col gap-2 text-sm leading-relaxed text-muted-foreground">
           <li>停赛不扣分：连续 t 周无比赛，φ² ← φ² + t·σ²，再应用 RD 上限；已有评分的缺席者不自动失去分数。</li>
+          <li>
+            不确定性刻意涨得慢：以初始 σ = 0.06 估算，一整季（13 周）不打，RD 从下限 60 涨到约
+            96；连续约 135 周（两年半）不打才封顶 250。
+          </li>
           <li>主榜按实力均值 r 排序，不默认使用 r − k·RD，避免把不确定性增长悄悄变成扣分；RD 是可信程度提示，不是已验证严格校准的置信区间。</li>
           <li>不叠加连胜、出勤、净胜分等额外奖励；赛季软重置与周结算校准也不是出勤奖励。</li>
         </ul>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <SubsectionTitle>赛季软重置</SubsectionTitle>
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          每季第一周结算时（季首周一 00:00 的区段边界），所有在册球员一次性向中心收缩：超出 1100
+          的部分、低于 900 的差距都只保留 3/4，区间内不动；RD 只抬不降，下限 90；σ 不变：
+        </p>
+        <Formula>{`r' = 1100 + 0.75·(r − 1100)
+r' = 900 + 0.75·(r − 900)
+r' = r
+RD' = min(250, max(RD, 90))
+σ' = σ`}</Formula>
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          三行 r&#39; 分别对应 r &gt; 1100、r &lt; 900、900～1100 区间内。例：1326 / RD 68 → 1269.5
+          / RD 90；842 / RD 96 → 856.5 / RD 96；1030 / RD 120 → 不动。赛季报的「期初」就是这次重置后的分数。
+        </p>
       </div>
 
       <div className="flex flex-col gap-2">
