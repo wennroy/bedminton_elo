@@ -19,7 +19,7 @@ export default function MethodologyLegacyPage() {
       </div>
       <p className="text-sm leading-relaxed text-muted-foreground">
         Legacy 保留旧版 ELO 计分作为历史对照，继续按原公式计算；TrueSkill
-        只作对照指标与配对调度工具。以下说明两者的口径与公式；想看现行新版见页底链接。
+        只作对照指标与配对调度工具。现行新版见页底链接。
       </p>
       <EloSection />
       <TrueSkillSection />

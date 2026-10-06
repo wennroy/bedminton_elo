@@ -12,12 +12,14 @@ export function EloSection() {
           期望胜率（logistic 形式，400 分尺度）：
         </p>
         <Formula>{`E = 1 / (1 + 10^((R_opp − R) / 400))
-delta = 16 · (s − E)        s ∈ {1 胜, 0 负}`}</Formula>
+delta = 16 · (s − E)
+s ∈ {1 胜, 0 负}`}</Formula>
         <p className="text-sm leading-relaxed text-muted-foreground">
           预测口径与结算口径不同。预测（predictElo）用两队均分：
         </p>
         <Formula>{`teamAvg = (r1 + r2) / 2
-P(A 胜) = 1 / (1 + 10^((avg_B − avg_A) / 400))`}</Formula>
+d = avg_B − avg_A
+P(A 胜) = 1 / (1 + 10^(d / 400))`}</Formula>
         <p className="text-sm leading-relaxed text-muted-foreground">
           结算（replayMatches）则是逐人对对方队均：每人的 expected
           按「个人分 vs 对方队均」计算，delta = 16 × (s −

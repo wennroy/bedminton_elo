@@ -71,40 +71,40 @@ export function Glicko2Section() {
           </thead>
           <tbody>
             <tr>
-              <td className={tableBodyCell}>新人初始 r</td>
-              <td className={tableBodyCell}>1000</td>
+              <td className={`${tableBodyCell} whitespace-nowrap`}>新人初始 r</td>
+              <td className={`${tableBodyCell} whitespace-nowrap`}>1000</td>
               <td className={tableBodyCell}>展示分</td>
             </tr>
             <tr>
-              <td className={tableBodyCell}>新人初始 RD</td>
-              <td className={tableBodyCell}>180</td>
+              <td className={`${tableBodyCell} whitespace-nowrap`}>新人初始 RD</td>
+              <td className={`${tableBodyCell} whitespace-nowrap`}>180</td>
               <td className={tableBodyCell}>承认新人实力未知</td>
             </tr>
             <tr>
-              <td className={tableBodyCell}>RD 下限</td>
-              <td className={tableBodyCell}>60</td>
+              <td className={`${tableBodyCell} whitespace-nowrap`}>RD 下限</td>
+              <td className={`${tableBodyCell} whitespace-nowrap`}>60</td>
               <td className={tableBodyCell}>保留调整空间</td>
             </tr>
             <tr>
-              <td className={tableBodyCell}>RD 上限</td>
-              <td className={tableBodyCell}>250</td>
+              <td className={`${tableBodyCell} whitespace-nowrap`}>RD 上限</td>
+              <td className={`${tableBodyCell} whitespace-nowrap`}>250</td>
               <td className={tableBodyCell}>限制停赛后的不确定性</td>
             </tr>
             <tr>
-              <td className={tableBodyCell}>初始波动性 σ</td>
-              <td className={tableBodyCell}>0.06</td>
+              <td className={`${tableBodyCell} whitespace-nowrap`}>初始波动性 σ</td>
+              <td className={`${tableBodyCell} whitespace-nowrap`}>0.06</td>
               <td className={tableBodyCell}>内部 x 坐标、每周单位</td>
             </tr>
             <tr>
-              <td className={tableBodyCell}>波动性约束 τ</td>
-              <td className={tableBodyCell}>0.3</td>
+              <td className={`${tableBodyCell} whitespace-nowrap`}>波动性约束 τ</td>
+              <td className={`${tableBodyCell} whitespace-nowrap`}>0.3</td>
               <td className={tableBodyCell}>约束 σ 的更新幅度</td>
             </tr>
             <tr>
-              <td className={tableBodyCell}>赛季相关</td>
-              <td className={tableBodyCell}>900～1100 区间、保留率 0.75、季初 RD 下限 90</td>
+              <td className={`${tableBodyCell} whitespace-nowrap`}>赛季软重置</td>
+              <td className={`${tableBodyCell} whitespace-nowrap`}>0.75</td>
               <td className={tableBodyCell}>
-                仅列出备查，赛季制度详见
+                超出 900～1100 区间的部分按 0.75 保留，季初 RD 下限 90；详见
                 <Link
                   href="/season"
                   className="underline underline-offset-2 transition-colors hover:text-foreground"
@@ -124,9 +124,12 @@ export function Glicko2Section() {
           尺度同时作用于实力与不确定性，不能只缩分差而不缩不确定性：
         </p>
         <Formula>{`c = 173.7178
-x = (r − 1000) / (2c)        φ = RD / (2c)
-r = 1000 + 2c·x              RD = 2c·φ
-σ 在 x 坐标下以周为单位保存，不与其他尺度的波动性混用`}</Formula>
+x = (r − 1000) / (2c)
+φ = RD / (2c)
+r = 1000 + 2c·x
+RD = 2c·φ
+σ 在 x 坐标下以周为单位保存
+不与其他尺度的波动性混用`}</Formula>
       </div>
 
       <div className="flex flex-col gap-2">
@@ -134,8 +137,8 @@ r = 1000 + 2c·x              RD = 2c·φ
         <p className="text-sm leading-relaxed text-muted-foreground">
           更新 A1（搭档 A2，对手 B1、B2）时，把两名对手与搭档合成一个等效对手。搭档在均值公式中是减号，方差仍相加——其余三人的评分都有误差，他们的方差全部计入：
         </p>
-        <Formula>{`x_virtual   = x_B1 + x_B2 − x_A2
-φ_virtual = sqrt(φ_B1² + φ_B2² + φ_A2²)`}</Formula>
+        <Formula>{`x_virtual = x_B1 + x_B2 − x_A2
+φ_virtual = sqrt(φ_B1²+φ_B2²+φ_A2²)`}</Formula>
         <p className="text-sm leading-relaxed text-muted-foreground">
           等效对手只用于计算，不会被截断到真人分数的上下限，因此等效 RD
           可以超过真人的 RD 上限。例：1400＋800 对阵 1100＋1100，双方总实力相等，对外胜率恰为
@@ -152,8 +155,9 @@ r = 1000 + 2c·x              RD = 2c·φ
         </p>
         <Formula>{`g(z) = 1 / sqrt(1 + 3z² / π²)
 D = x_A1 + x_A2 − x_B1 − x_B2
-U = sqrt(φ_A1² + φ_A2² + φ_B1² + φ_B2²)
-P(A 胜) = logistic(g(U) · D)      logistic(z) = 1 / (1 + e^(−z))`}</Formula>
+U² = φ_A1² + φ_A2² + φ_B1² + φ_B2²
+P(A 胜) = logistic(g(U) · D)
+logistic(z) = 1 / (1 + e^(−z))`}</Formula>
         <p className="text-sm leading-relaxed text-muted-foreground">
           个人更新里的期望胜率 E
           以等效对手为条件计算（自己的不确定性走更新公式，其余三人走等效对手），与对外
@@ -183,11 +187,15 @@ P(A 胜) = logistic(g(U) · D)      logistic(z) = 1 / (1 + e^(−z))`}</Formula>
         <p className="text-sm leading-relaxed text-muted-foreground">
           周内冻结波动性下的单场更新（Estimated 路径）：
         </p>
-        <Formula>{`g_i = g(φ_virtual)        E_i = logistic(g_i · (x_i − x_virtual))
+        <Formula>{`d_i = x_i − x_virtual
+g_i = g(φ_virtual)
+E_i = logistic(g_i · d_i)
 I_i = g_i² · E_i · (1 − E_i)
-G_i = g_i · (result_i − E_i)     result ∈ {1 胜, 0 负}
+G_i = g_i · (result_i − E_i)
 V_i = 1 / (1 / φ_i² + I_i)
-x_i' = x_i + V_i · G_i           φ_i' = sqrt(V_i)`}</Formula>
+x_i' = x_i + V_i · G_i
+φ_i' = sqrt(V_i)
+result ∈ {1 胜, 0 负}`}</Formula>
         <p className="text-sm leading-relaxed text-muted-foreground">
           四人从同一份赛前快照同时写回；不能先更新 A
           队、再用变化后的状态更新 B 队。RD 边界在准备工作状态和每次更新后应用，均值更新使用未截断的
@@ -207,38 +215,40 @@ x_i' = x_i + V_i · G_i           φ_i' = sqrt(V_i)`}</Formula>
           −0.0576，U ≈ 0.794，g(U) ≈ 0.916，P(A 胜) = logistic(−0.0527) ≈
           48.68%（乙队 51.32%）。
         </p>
-        <table className="w-full border-collapse">
-          <thead>
-            <tr>
-              <th className={tableHeaderCell}>选手</th>
-              <th className={tableHeaderCell}>赛前 r / RD</th>
-              <th className={tableHeaderCell}>等效对手分</th>
-              <th className={tableHeaderCell}>等效 RD</th>
-              <th className={tableHeaderCell}>E</th>
-              <th className={tableHeaderCell}>结果</th>
-              <th className={tableHeaderCell}>Δr</th>
-              <th className={tableHeaderCell}>赛后 r / RD</th>
-            </tr>
-          </thead>
-          <tbody>
-            {EXAMPLE_ROWS.map((row) => (
-              <tr key={row.player}>
-                <td className={tableBodyCell}>{row.player}</td>
-                <td className={tableBodyCell}>{row.before}</td>
-                <td className={tableBodyCell}>{row.virtual}</td>
-                <td className={tableBodyCell}>{row.virtualRd}</td>
-                <td className={tableBodyCell}>{row.expected}</td>
-                <td className={tableBodyCell}>{row.result}</td>
-                <td
-                  className={`${tableBodyCell} font-num ${row.win ? "text-win" : "text-loss"}`}
-                >
-                  {row.delta}
-                </td>
-                <td className={tableBodyCell}>{row.after}</td>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse whitespace-nowrap">
+            <thead>
+              <tr>
+                <th className={tableHeaderCell}>选手</th>
+                <th className={tableHeaderCell}>赛前 r / RD</th>
+                <th className={tableHeaderCell}>等效对手分</th>
+                <th className={tableHeaderCell}>等效 RD</th>
+                <th className={tableHeaderCell}>E</th>
+                <th className={tableHeaderCell}>结果</th>
+                <th className={tableHeaderCell}>Δr</th>
+                <th className={tableHeaderCell}>赛后 r / RD</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {EXAMPLE_ROWS.map((row) => (
+                <tr key={row.player}>
+                  <td className={tableBodyCell}>{row.player}</td>
+                  <td className={tableBodyCell}>{row.before}</td>
+                  <td className={tableBodyCell}>{row.virtual}</td>
+                  <td className={tableBodyCell}>{row.virtualRd}</td>
+                  <td className={tableBodyCell}>{row.expected}</td>
+                  <td className={tableBodyCell}>{row.result}</td>
+                  <td
+                    className={`${tableBodyCell} font-num ${row.win ? "text-win" : "text-loss"}`}
+                  >
+                    {row.delta}
+                  </td>
+                  <td className={tableBodyCell}>{row.after}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
         <ul className="flex flex-col gap-2 text-sm leading-relaxed text-muted-foreground">
           <li>乙的分数最低，但 RD 最大、调整空间最大，等效对手（960）又略高于自己，E 不足五成，因此获胜后涨得最多。</li>
           <li>等效 RD（223～252）超过真人 RD 上限 250 是正常的：三人方差相加，等效对手不做截断。</li>
