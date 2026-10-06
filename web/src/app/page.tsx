@@ -14,7 +14,6 @@ import { PredictCard } from "@/components/predict-card";
 import { WeeklyQuote } from "@/components/weekly-quote";
 import { RatingBoundaryRefresh } from "@/components/rating-boundary-refresh";
 import { RatingModeControl } from "@/components/rating-mode-control";
-import { RatingStatus, toRatingStatusInput } from "@/components/rating-status";
 import {
   OverviewSummary,
   type OverviewStat,
@@ -119,11 +118,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       <RatingBoundaryRefresh
         nextBoundary={result.model === "glicko2" ? result.nextBoundary : null}
       />
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          {/* 三行状态说明信息密度高，仅首页展开；其余页面用默认 false。 */}
-          <RatingStatus {...toRatingStatusInput(result)} showLegend />
-        </div>
+      <div className="flex justify-end">
         <RatingModeControl current={result.model} />
       </div>
 
