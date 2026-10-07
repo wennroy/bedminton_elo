@@ -242,23 +242,12 @@ describe("eventLocalDate", () => {
     expect(eventLocalDate("2026-09-22")).toBe("2026-09-22");
   });
 
-  it("ISO 瞬刻转本地日期（本地组件，非 UTC 切片）", () => {
-    const at = "2026-10-05T16:00:00.000Z";
-    const d = new Date(at);
-    const expected = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    expect(eventLocalDate(at)).toBe(expected);
-  });
-
-  it("上海周界午夜在上海时区显示当天，而非 UTC 切片的前一天", () => {
-    // 2026-10-06T00:00:00+08:00 = UTC 2026-10-05T16:00:00Z；slice(0,10) 会错一天
-    const prev = process.env.TZ;
-    process.env.TZ = "Asia/Shanghai";
-    try {
-      expect(eventLocalDate("2026-10-05T16:00:00.000Z")).toBe("2026-10-06");
-    } finally {
-      if (prev === undefined) delete process.env.TZ;
-      else process.env.TZ = prev;
-    }
+  it("ISO 瞬刻按上海日历取日期，与宿主时区无关", () => {
+    // 2026-10-06T00:00:00+08:00 = UTC 2026-10-05T16:00:00Z；UTC 切片会错一天
+    expect(eventLocalDate("2026-10-05T16:00:00.000Z")).toBe("2026-10-06");
+    // UTC 同一日历日内 16:00 是上海次日 00:00 的分界
+    expect(eventLocalDate("2026-10-07T15:59:59.000Z")).toBe("2026-10-07");
+    expect(eventLocalDate("2026-10-07T16:00:00.000Z")).toBe("2026-10-08");
   });
 });
 

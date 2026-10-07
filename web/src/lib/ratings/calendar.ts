@@ -15,6 +15,13 @@ const shanghaiDateFormatter = new Intl.DateTimeFormat("en-US-u-ca-gregory-nu-lat
   day: "2-digit",
 });
 
+const shanghaiTimeFormatter = new Intl.DateTimeFormat("en-US-u-ca-gregory-nu-latn", {
+  timeZone: "Asia/Shanghai",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
 export interface RatingSegmentRange {
   /** Inclusive Shanghai-midnight ISO instant. */
   start: string;
@@ -47,6 +54,22 @@ export function assertLocalDate(value: unknown): asserts value is LocalDate {
 /** Converts an ISO instant to its Gregorian calendar date in Asia/Shanghai. */
 export function shanghaiLocalDateFromInstant(instant: string): LocalDate {
   return shanghaiLocalDateFromDate(new Date(assertIsoInstant(instant)));
+}
+
+/**
+ * ISO 瞬刻 → 上海墙钟部件：月份/日期为数字，时/分为两位字符串。
+ * 服务端与客户端共用同一 Asia/Shanghai 口径，不随宿主时区漂移。
+ */
+export function shanghaiWallClockFromInstant(instant: string): {
+  month: number;
+  day: number;
+  hours: string;
+  minutes: string;
+} {
+  const date = new Date(assertIsoInstant(instant));
+  const { month, day } = shanghaiCivilDateFromDate(date);
+  const parts = formatParts(shanghaiTimeFormatter, date);
+  return { month, day, hours: parts.hour, minutes: parts.minute };
 }
 
 /**

@@ -1,15 +1,12 @@
 import type { LoadRatingViewResult } from "@/lib/rating-view";
+import { shanghaiWallClockFromInstant } from "@/lib/ratings/calendar";
 import type { RatingStatus } from "@/lib/ratings/types";
 import { cn } from "@/lib/utils";
 
-/** asOf（ISO instant）→ 本地「M月D日 HH:MM」，沿用 components 的本地时间格式化惯例。 */
+/** asOf（ISO instant）→ 上海墙钟「M月D日 HH:MM」，服务端/客户端同一口径。 */
 export function formatStatusInstant(iso: string): string {
-  const d = new Date(iso);
-  const m = d.getMonth() + 1;
-  const day = d.getDate();
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  return `${m}月${day}日 ${hh}:${mm}`;
+  const { month, day, hours, minutes } = shanghaiWallClockFromInstant(iso);
+  return `${month}月${day}日 ${hours}:${minutes}`;
 }
 
 /**

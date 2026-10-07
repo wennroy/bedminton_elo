@@ -15,6 +15,7 @@ import {
   UserPlus,
 } from "lucide-react";
 import { getMyPlayerId, setMyPlayerId } from "@/lib/identity";
+import { shanghaiLocalDateFromInstant } from "@/lib/ratings/calendar";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { IdentityPicker } from "@/components/identity-picker";
 import { EloDeltaCard, type EloDeltaPlayer } from "@/components/elo-delta-card";
@@ -87,11 +88,8 @@ type MatchRatingFieldClient =
   | { state: "not_effective"; model: "glicko2"; reason: string };
 
 function todayString(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  // 营业日以 Asia/Shanghai 为准，与评分引擎口径一致，不随服务器时区漂移
+  return shanghaiLocalDateFromInstant(new Date().toISOString());
 }
 
 function notEffectiveDetail(rating: { reason: string }): string {

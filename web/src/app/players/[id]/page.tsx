@@ -13,6 +13,7 @@ import { INITIAL_RATING } from "@/lib/elo";
 import { getWeekRange } from "@/lib/weekly";
 import { listMatchesByDate, listPlayers, type MatchWithNames } from "@/lib/repo";
 import { loadRatingView } from "@/lib/rating-view";
+import { shanghaiLocalDateFromInstant } from "@/lib/ratings/calendar";
 import type { RatingIssue } from "@/lib/ratings/types";
 import { RatingBoundaryRefresh } from "@/components/rating-boundary-refresh";
 import { RatingModeControl } from "@/components/rating-mode-control";
@@ -35,11 +36,8 @@ interface PlayerPageProps {
 }
 
 function todayString(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  // 营业日以 Asia/Shanghai 为准，与评分引擎口径一致，不随服务器时区漂移
+  return shanghaiLocalDateFromInstant(new Date().toISOString());
 }
 
 const ISSUE_REASON_TEXT: Record<RatingIssue["reason"], string> = {
