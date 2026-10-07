@@ -29,6 +29,7 @@ import {
   formatTrendSeasonLabel,
   listTrendSeasons,
 } from "@/lib/ratings/chart-data";
+import { pickAxisTicks, yearBoundaryIndices } from "@/lib/ratings/axis-ticks";
 import { cn } from "@/lib/utils";
 
 interface PlayerLite {
@@ -96,6 +97,69 @@ function seriesVar(index: number): string {
 
 function shortDate(date: string): string {
   return date.slice(5).replace("-", ".");
+}
+
+/** 抽稀刻度时为 Y 轴与边距预留的横向余量(px)。 */
+const AXIS_X_GUTTER = 64;
+
+/** 监听元素宽度:抽稀刻度需要知道容器横向空间(recharts 不向外暴露)。 */
+function useElementWidth(): [React.RefObject<HTMLDivElement>, number] {
+  const ref = React.useRef<HTMLDivElement>(null);
+  const [width, setWidth] = React.useState(0);
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    setWidth(el.clientWidth);
+    const observer = new ResizeObserver((entries) => {
+      setWidth(entries[0]?.contentRect.width ?? 0);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  return [ref, width];
+}
+
+/**
+ * X 轴刻度:第一行 MM.DD;跨年边界的刻度在第二行标注年份
+ * (「从这里开始年份变更」)。boundaries 以刻度值(Legacy=日期,glicko2=事件 key)
+ * 为键;dateOf 把刻度值换算回日期用于展示。
+ */
+export function TrendXAxisTick({
+  x,
+  y,
+  payload,
+  boundaries,
+  dateOf,
+}: {
+  x?: number | string;
+  y?: number | string;
+  payload?: { value?: number | string };
+  boundaries: ReadonlySet<string>;
+  dateOf: (value: string) => LocalDate | null;
+}) {
+  const value = payload?.value;
+  const date = value !== undefined ? dateOf(String(value)) : null;
+  if (date === null) return <g />;
+  const year =
+    value !== undefined && boundaries.has(String(value))
+      ? date.slice(0, 4)
+      : null;
+  return (
+    <text
+      x={x}
+      y={y}
+      textAnchor="middle"
+      fontSize={10}
+      fill="var(--muted-foreground)"
+    >
+      <tspan x={x}>{shortDate(date)}</tspan>
+      {year !== null ? (
+        <tspan x={x} dy={11} fontSize={9} fontWeight={700}>
+          {year}
+        </tspan>
+      ) : null}
+    </text>
+  );
 }
 
 function Segmented<T extends string>({
@@ -230,6 +294,21 @@ function LegacyTrend({
     return [cutoff, ...allDates.filter((d) => d > cutoff)];
   }, [allDates, range]);
 
+  // X 轴：按容器宽度抽稀刻度,跨年边界的日期始终保留并加第二行年份
+  const [axisRef, axisWidth] = useElementWidth();
+  const axis = React.useMemo(() => {
+    const boundaryDates = new Set(
+      [...yearBoundaryIndices(windowDates)].map((i) => windowDates[i])
+    );
+    return {
+      ticks: pickAxisTicks(windowDates, {
+        width: Math.max(0, axisWidth - AXIS_X_GUTTER),
+        isBoundary: (d) => boundaryDates.has(d),
+      }),
+      boundaryDates,
+    };
+  }, [windowDates, axisWidth]);
+
   /** 某日全员名次：ELO 降序，同分按 id 升序（与排行榜口径一致） */
   const rankingAt = React.useCallback(
     (date: string): PlayerLite[] =>
@@ -341,7 +420,7 @@ function LegacyTrend({
             </div>
           ) : (
             <>
-              <div className="h-[250px] min-[761px]:h-[290px]">
+              <div ref={axisRef} className="h-[250px] min-[761px]:h-[290px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart
                     data={chartData}
@@ -360,10 +439,17 @@ function LegacyTrend({
                     />
                     <XAxis
                       dataKey="date"
-                      tickFormatter={shortDate}
-                      tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+                      ticks={axis.ticks}
+                      interval={0}
+                      height={axis.boundaryDates.size > 0 ? 40 : 30}
+                      tick={(props) => (
+                        <TrendXAxisTick
+                          {...props}
+                          boundaries={axis.boundaryDates}
+                          dateOf={(d) => d}
+                        />
+                      )}
                       tickMargin={6}
-                      minTickGap={40}
                       tickLine={false}
                       axisLine={false}
                     />
@@ -701,6 +787,25 @@ function Glicko2Trend({
     return appendCurrentEstimateRow(base, { values, currentSegmentId, now });
   }, [view.points, view.weekSegments, view.players, seasonFilter, seasonKey, currentSegmentId, now]);
 
+  // X 轴:按容器宽度抽稀刻度(刻度值=事件 key),跨年边界的事件始终保留并加第二行年份
+  const [axisRef, axisWidth] = useElementWidth();
+  const axis = React.useMemo(() => {
+    const dates = rows.map((row) => eventLocalDate(row.at));
+    const boundaryKeys = new Set(
+      [...yearBoundaryIndices(dates)].map((i) => rows[i].key)
+    );
+    return {
+      ticks: pickAxisTicks(
+        rows.map((row) => row.key),
+        {
+          width: Math.max(0, axisWidth - AXIS_X_GUTTER),
+          isBoundary: (key) => boundaryKeys.has(key),
+        }
+      ),
+      boundaryKeys,
+    };
+  }, [rows, axisWidth]);
+
   const ratingRows = React.useMemo(() => displayRatingRows(rows), [rows]);
   const rankRows = React.useMemo(() => displayRankRows(rows), [rows]);
   const displayRows = mode === "rank" ? rankRows : ratingRows;
@@ -857,7 +962,7 @@ function Glicko2Trend({
             </div>
           ) : (
             <>
-              <div className="h-[250px] min-[761px]:h-[290px]">
+              <div ref={axisRef} className="h-[250px] min-[761px]:h-[290px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart
                     data={chartData}
@@ -876,14 +981,20 @@ function Glicko2Trend({
                     />
                     <XAxis
                       dataKey="key"
-                      tickFormatter={(key) =>
-                        rowByKey.get(String(key))
-                          ? shortDate(eventLocalDate(rowByKey.get(String(key))!.at))
-                          : ""
-                      }
-                      tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+                      ticks={axis.ticks}
+                      interval={0}
+                      height={axis.boundaryKeys.size > 0 ? 40 : 30}
+                      tick={(props) => (
+                        <TrendXAxisTick
+                          {...props}
+                          boundaries={axis.boundaryKeys}
+                          dateOf={(key) => {
+                            const row = rowByKey.get(key);
+                            return row ? eventLocalDate(row.at) : null;
+                          }}
+                        />
+                      )}
                       tickMargin={6}
-                      minTickGap={40}
                       tickLine={false}
                       axisLine={false}
                     />

@@ -25,7 +25,7 @@ import {
   vi,
 } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { HomeTrend } from "./home-trend";
+import { HomeTrend, TrendXAxisTick } from "./home-trend";
 import { createRatingConfig } from "@/lib/ratings/config";
 import { replayRatings } from "@/lib/ratings/replay";
 import { projectRatingView } from "@/lib/ratings/projections";
@@ -319,5 +319,44 @@ describe("新版 glicko2 趋势(全量页)", () => {
     expect(screen.queryByText("点击日期查看该时点的排名与评分")).toBeNull();
     const link = screen.getByRole("link", { name: /展开大图/ });
     expect(link.getAttribute("href")).toBe("/trends?rating=glicko2");
+  });
+});
+
+describe("X 轴刻度(跨年第二行年份)", () => {
+  const renderTick = (
+    value: string,
+    boundaries: ReadonlySet<string>,
+    dateOf: (v: string) => string | null = (v) => v
+  ) =>
+    render(
+      <svg>
+        <TrendXAxisTick
+          x={50}
+          y={270}
+          payload={{ value }}
+          boundaries={boundaries}
+          dateOf={dateOf}
+        />
+      </svg>
+    );
+
+  it("跨年边界刻度渲染两行:MM.DD + 年份", () => {
+    const { container } = renderTick("2026-01-04", new Set(["2026-01-04"]));
+    const tspans = container.querySelectorAll("tspan");
+    expect(tspans).toHaveLength(2);
+    expect(tspans[0].textContent).toBe("01.04");
+    expect(tspans[1].textContent).toBe("2026");
+  });
+
+  it("非边界刻度只渲染 MM.DD 一行", () => {
+    const { container } = renderTick("2026-01-11", new Set(["2026-01-04"]));
+    const tspans = container.querySelectorAll("tspan");
+    expect(tspans).toHaveLength(1);
+    expect(tspans[0].textContent).toBe("01.11");
+  });
+
+  it("刻度值无法换算日期时渲染空(glicko2 未知 key)", () => {
+    const { container } = renderTick("missing-key", new Set(), () => null);
+    expect(container.querySelector("text")).toBeNull();
   });
 });
