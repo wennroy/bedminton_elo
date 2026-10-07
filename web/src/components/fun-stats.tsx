@@ -6,6 +6,7 @@ import { Search, Users } from "lucide-react";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { CollapsibleSection } from "@/components/collapsible-section";
 import { getMyPlayerId } from "@/lib/identity";
+import { shanghaiLocalDateFromInstant } from "@/lib/ratings/calendar";
 import {
   Dialog,
   DialogContent,
@@ -244,12 +245,9 @@ function LegacyMoreMetrics({
   );
 }
 
-/** ISO 瞬刻 → 本地 YYYY-MM-DD：周 Final/重置为上海午夜，截断 UTC 字符串会差一天。 */
+/** ISO 瞬刻 → 上海日历 YYYY-MM-DD：周 Final/重置为上海午夜，随宿主时区取日期会差一天。 */
 function localDateOfInstant(iso: string): string {
-  const d = new Date(iso);
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${m}-${day}`;
+  return shanghaiLocalDateFromInstant(iso);
 }
 
 /** 新版 RD / 最长连胜 / 正式峰值（只取周 Final，不含重置与 Estimated）。 */

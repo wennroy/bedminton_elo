@@ -456,14 +456,14 @@ describe("rating-status 状态映射", () => {
     expect(descriptions.size).toBe(3);
   });
 
-  it("formatStatusInstant 输出本地「M月D日 HH:MM」", () => {
-    const iso = "2026-10-06T12:34:56Z";
-    const d = new Date(iso);
-    const expected = `${d.getMonth() + 1}月${d.getDate()}日 ${String(
-      d.getHours()
-    ).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-    expect(formatStatusInstant(iso)).toBe(expected);
-    expect(formatStatusInstant(iso)).toMatch(/^\d{1,2}月\d{1,2}日 \d{2}:\d{2}$/);
+  it("formatStatusInstant 输出上海墙钟「M月D日 HH:MM」，与宿主时区无关", () => {
+    // 2026-10-06T12:34:56Z = 上海 2026-10-06 20:34
+    expect(formatStatusInstant("2026-10-06T12:34:56Z")).toBe("10月6日 20:34");
+    // 跨日界：UTC 16:00 是上海次日 00:00
+    expect(formatStatusInstant("2026-10-05T16:00:00Z")).toBe("10月6日 00:00");
+    expect(formatStatusInstant("2026-10-06T12:34:56Z")).toMatch(
+      /^\d{1,2}月\d{1,2}日 \d{2}:\d{2}$/
+    );
   });
 });
 

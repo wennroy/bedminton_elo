@@ -11,6 +11,7 @@ import {
   ratingSegmentAt,
   shanghaiLocalDateFromInstant,
   shanghaiMidnightIso,
+  shanghaiWallClockFromInstant,
   weekStart,
 } from "./calendar";
 
@@ -38,6 +39,22 @@ describe("rating calendar", () => {
     expect(shanghaiLocalDateFromInstant(shanghaiMidnightIso("1919-04-13"))).toBe(
       "1919-04-13"
     );
+  });
+
+  it("returns Shanghai wall-clock parts for instants regardless of the host time zone", () => {
+    expect(shanghaiWallClockFromInstant("2026-10-06T12:34:56Z")).toEqual({
+      month: 10,
+      day: 6,
+      hours: "20",
+      minutes: "34",
+    });
+    // UTC 16:00 是上海次日 00:00：日期与时钟一起跨日
+    expect(shanghaiWallClockFromInstant("2026-10-05T16:00:00Z")).toEqual({
+      month: 10,
+      day: 6,
+      hours: "00",
+      minutes: "00",
+    });
   });
 
   it("normalizes early Gregorian years to strict four-digit local dates", () => {

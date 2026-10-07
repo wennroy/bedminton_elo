@@ -7,6 +7,7 @@ import { RatingModeControl } from "@/components/rating-mode-control";
 import { RatingStatus, toRatingStatusInput } from "@/components/rating-status";
 import { leaderboardSummaries } from "@/lib/stats";
 import { loadRatingView } from "@/lib/rating-view";
+import { shanghaiLocalDateFromInstant } from "@/lib/ratings/calendar";
 import { getWeekRange } from "@/lib/weekly";
 
 export const dynamic = "force-dynamic";
@@ -16,11 +17,8 @@ interface TrendsPageProps {
 }
 
 function getTodayString(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  // 营业日以 Asia/Shanghai 为准，与评分引擎口径一致，不随服务器时区漂移
+  return shanghaiLocalDateFromInstant(new Date().toISOString());
 }
 
 export default async function TrendsPage({ searchParams }: TrendsPageProps) {

@@ -15,6 +15,7 @@ import { ArrowRight, Check } from "lucide-react";
 import type { EloHistoryPoint } from "@/lib/stats";
 import { INITIAL_RATING } from "@/lib/elo";
 import { getMyPlayerId } from "@/lib/identity";
+import { shanghaiLocalDateFromInstant } from "@/lib/ratings/calendar";
 import type { LocalDate } from "@/lib/ratings/types";
 import type { RatingView } from "@/lib/ratings/view-types";
 import {
@@ -82,17 +83,10 @@ const Glicko2_MODES: { key: Mode; label: string }[] = [
   { key: "rank", label: "排名" },
 ];
 
-function localDateString(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
 function cutoffDate(weeks: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - weeks * 7);
-  return localDateString(d);
+  // 周期档以 Asia/Shanghai 的今天为锚：服务端与客户端同一口径，不随宿主时区漂移
+  const anchor = new Date(Date.now() - weeks * 7 * 24 * 60 * 60 * 1000);
+  return shanghaiLocalDateFromInstant(anchor.toISOString());
 }
 
 /** 每球员固定颜色：--series-1..8 按 id 升序索引循环 */
