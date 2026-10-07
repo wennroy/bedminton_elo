@@ -410,30 +410,6 @@ function LegacyTrend({
                   </LineChart>
                 </ResponsiveContainer>
               </div>
-              {/* 键盘 / 触碰兜底：日期按钮行（hover 图区也可定位） */}
-              <div
-                className="mt-1 flex gap-0.5 overflow-x-auto pb-1"
-                role="group"
-                aria-label="选择查看日期"
-              >
-                {windowDates.map((d) => (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={() => setInspectedDate(d)}
-                    onFocus={() => setInspectedDate(d)}
-                    aria-label={`查看 ${d} 全员积分`}
-                    className={cn(
-                      "shrink-0 rounded px-1.5 py-0.5 font-num text-[10px] transition-colors",
-                      d === inspected
-                        ? "bg-secondary font-bold text-foreground"
-                        : "text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    {shortDate(d)}
-                  </button>
-                ))}
-              </div>
             </>
           )}
         </div>
@@ -481,11 +457,6 @@ function LegacyTrend({
             </div>
           )}
         </aside>
-      </div>
-
-      <div className="mt-[17px] flex justify-between gap-3 text-[10px] text-muted-foreground max-[760px]:mt-4 max-[760px]:text-[9px]">
-        <span>点击日期查看当日排名与积分</span>
-        <span className="max-[760px]:hidden">颜色与球员固定对应</span>
       </div>
 
       <div className="mt-[19px] border-t border-border pt-[13px] max-[760px]:mt-4 max-[760px]:pt-2.5">
@@ -982,30 +953,6 @@ function Glicko2Trend({
                   </LineChart>
                 </ResponsiveContainer>
               </div>
-              {/* 键盘 / 触碰兜底：事件时点按钮行 */}
-              <div
-                className="mt-1 flex gap-0.5 overflow-x-auto pb-1"
-                role="group"
-                aria-label="选择查看日期"
-              >
-                {rows.map((row) => (
-                  <button
-                    key={row.key}
-                    type="button"
-                    onClick={() => setInspectedKey(row.key)}
-                    onFocus={() => setInspectedKey(row.key)}
-                    aria-label={`查看 ${eventLocalDate(row.at)} 全员评分`}
-                    className={cn(
-                      "shrink-0 rounded px-1.5 py-0.5 font-num text-[10px] transition-colors",
-                      row.key === inspected
-                        ? "bg-secondary font-bold text-foreground"
-                        : "text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    {shortDate(eventLocalDate(row.at))}
-                  </button>
-                ))}
-              </div>
             </>
           )}
         </div>
@@ -1080,8 +1027,7 @@ function Glicko2Trend({
         </aside>
       </div>
 
-      <div className="mt-[17px] flex justify-between gap-3 text-[10px] text-muted-foreground max-[760px]:mt-4 max-[760px]:text-[9px]">
-        <span>点击日期查看该时点的排名与评分</span>
+      <div className="mt-[17px] flex justify-end gap-3 text-[10px] text-muted-foreground max-[760px]:mt-4 max-[760px]:text-[9px]">
         <span className="inline-flex items-center gap-2.5">
           <span className="inline-flex items-center gap-1">
             <span className="inline-block w-4 border-t-2 border-current" />
