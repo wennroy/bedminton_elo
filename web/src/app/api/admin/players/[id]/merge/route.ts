@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { isAdminKey } from "@/lib/admin";
-import { mergePlayers } from "@/lib/repo";
+import { mergePlayerWithScheduleRefs } from "@/lib/schedule-service";
 import { revalidateRatingPages } from "@/lib/rating-revalidation";
 
 export async function POST(
@@ -39,9 +39,11 @@ export async function POST(
 
   try {
     const db = getDb();
-    mergePlayers(id, toId, db);
+    // 排阵联动合并：同事务预检（目标存在/同场双人对撞/同项目双人成员），
+    // 无冲突时迁移 matches + 全部 schedule_* 引用并 bump 受影响项目。
+    const result = mergePlayerWithScheduleRefs(id, toId, db);
     revalidateRatingPages();
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, ...result });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 400 });

@@ -13,6 +13,8 @@ export function getDatabaseUrl(): string {
 export function createDb(url?: string): Database.Database {
   const db = new Database(url ?? getDatabaseUrl());
   db.pragma("journal_mode = WAL");
+  // 排阵项目等表的 FK 约束依赖此开关（SQLite 默认关闭）。每个新连接都要设置。
+  db.pragma("foreign_keys = ON");
   const schemaPath = join(__dirname, "schema.sql");
   const schema = readFileSync(schemaPath, "utf-8");
   db.exec(schema);

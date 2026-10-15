@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { defineConfig, configDefaults } from "vitest/config";
 import path from "path";
 
 export default defineConfig({
@@ -17,5 +17,8 @@ export default defineConfig({
     globals: true,
     environment: "node",
     pool: "forks",
+    // E2E 旅程（真实服务器+浏览器）只由 vitest.e2e.config.ts 承载，
+    // 单测跑法（pnpm test）不收集，避免拖重与端口占用。
+    exclude: [...configDefaults.exclude, "tests/e2e/**"],
   },
 });

@@ -5,6 +5,8 @@ import { unlinkSync } from "fs";
 import { closeDb, getDb } from "@/lib/db";
 import { addPlayer, addMatch, recomputeAllRatings } from "@/lib/repo";
 import { predictElo } from "@/lib/elo";
+import * as eloModule from "@/lib/elo";
+import * as trueskillModule from "@/lib/trueskill";
 import {
   initializeRatingConfig,
   readRatingConfig,
@@ -95,6 +97,14 @@ describe.sequential("schedule API", () => {
       { playerIds: [1, 2, 3], matches: 4 },
       { playerIds: [1, 1, 2, 3], matches: 4 },
       { playerIds: [1, 2, 3, 4], matches: 0 },
+      // 规模与整数上限
+      { playerIds: Array.from({ length: 65 }, (_, i) => i + 1), matches: 4 },
+      { playerIds: [1, 2, 3, 4], matches: 100 },
+      { playerIds: [1, 2, 3, 4], matches: 1.5 },
+      { playerIds: [1, 2, 3, 4], matches: 4, seed: -1 },
+      { playerIds: [1, 2, 3, 4], matches: 4, seed: 4294967296 },
+      { playerIds: [1, 2, 3, 4], matches: 4, seed: 1.5 },
+      { playerIds: [1, 2, 3, 4], matches: 4, lambda: 1.5 },
     ]) {
       const res = await POST(createRequest(body));
       expect(res.status).toBe(400);
@@ -121,6 +131,65 @@ describe.sequential("schedule API", () => {
     expect(data.configVersion).toBeNull();
     expect(data.asOf).toBeNull();
     expect(data.inputHash).toBeNull();
+  });
+
+  it("legacy：优化回调来自 Elo 而非 TrueSkill（同一回调驱动优化与展示）", async () => {
+    const [p1, p2, p3, p4] = ["甲", "乙", "丙", "丁"].map((name) =>
+      addPlayer(name)
+    );
+    // 拉开 Elo 差距，使 Elo 与 TrueSkill（全员初始 25/8.333）预测不同
+    addMatch({
+      pa1: p1,
+      pa2: p2,
+      pb1: p3,
+      pb2: p4,
+      scoreA: 21,
+      scoreB: 10,
+      playedAt: "2026-09-01",
+    });
+
+    const eloSpy: MockInstance<typeof eloModule.predictElo> = vi.spyOn(
+      eloModule,
+      "predictElo"
+    );
+    const tsSpy: MockInstance<typeof trueskillModule.predictTeamOutcomeWin> =
+      vi.spyOn(trueskillModule, "predictTeamOutcomeWin");
+    try {
+      const res = await POST(
+        createRequest({ playerIds: [p1, p2, p3, p4], matches: 3, seed: 42 })
+      );
+      expect(res.status).toBe(200);
+      // 优化与展示都走 predictElo；不再用 TrueSkill 优化
+      expect(eloSpy).toHaveBeenCalled();
+      expect(tsSpy).not.toHaveBeenCalled();
+
+      // 本地用同一 Elo 回调重放：同 seed 阵容逐位一致
+      const data = await res.json();
+      const ratings = recomputeAllRatings();
+      const eloRatings: Record<string, number> = Object.fromEntries(
+        [...ratings].map(([id, r]) => [String(id), r.elo])
+      );
+      const replay = optimizeSchedule({
+        playerIds: [p1, p2, p3, p4].map(String),
+        matches: 3,
+        players: [],
+        seed: 42,
+        lambda: 0.5,
+        winProbability: (m) =>
+          predictElo(m.a1, m.a2, m.b1, m.b2, eloRatings).teamAWin,
+      });
+      expect(
+        data.schedule.map((m: { a1: string; a2: string; b1: string; b2: string }) => ({
+          a1: m.a1,
+          a2: m.a2,
+          b1: m.b1,
+          b2: m.b2,
+        }))
+      ).toEqual(replay.schedule);
+    } finally {
+      eloSpy.mockRestore();
+      tsSpy.mockRestore();
+    }
   });
 
   it("glicko2：优化回调、API 概率与预测 DTO 三者同快照一致", async () => {

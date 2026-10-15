@@ -15,6 +15,9 @@ import { revalidatePath } from "next/cache";
  * - "/weekly"：周报消费周 Final/Estimated、区段与事实统计。
  * - "/predict"：预测页消费当前评分状态与胜率。
  * - "/schedule"：赛程/配对优化消费同一评分工作状态与概率。
+ * - "/schedule/projects"：排阵项目列表消费各项目的已录比分计数。
+ * - "/schedule/projects/[id]"（page）：项目详情消费场次比分与评分展示，
+ *   动态段一条 revalidatePath 覆盖全部项目页。
  * - "/matches"：全部比赛浏览页消费比赛事实列表。
  *
  * 刻意不含 "/signup"：签到与评分无关，仍由 signups 路由自行刷新。
@@ -31,6 +34,8 @@ export const RATING_REVALIDATE_PATHS: readonly RatingRevalidateEntry[] = [
   { path: "/weekly" },
   { path: "/predict" },
   { path: "/schedule" },
+  { path: "/schedule/projects" },
+  { path: "/schedule/projects/[id]", type: "page" },
   { path: "/matches" },
 ];
 

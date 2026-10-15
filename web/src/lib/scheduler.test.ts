@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { optimizeSchedule } from "./scheduler";
+import { optimizeSchedule, lambdaToWeights } from "./scheduler";
 import { predictTeamOutcomeWin } from "./trueskill";
-import golden from "../../test/golden/scheduler.json";
+// 版本化新 fixture：旧引擎（退火）在新引擎（quota-local-v1）下同 seed 输出
+// 不再承诺逐比特一致，golden 更新为 v2。旧 fixture test/golden/scheduler.json
+// 保留作历史参考（pre-v2 退火算法的黄金输出），不再被断言。
+import golden from "../../test/golden/scheduler.v2.json";
 
 describe("scheduler", () => {
   const input = golden.input as {
@@ -65,6 +68,21 @@ describe("scheduler", () => {
     expect(result.metrics.entropy).toBeGreaterThanOrEqual(0);
   });
 
+  it("carries engine version metadata and direct repeat count", () => {
+    const result = optimizeSchedule(input);
+    expect(result.algorithmVersion).toBe("quota-local-v1");
+    expect(result.objectiveVersion).toBe("balanced-v1");
+    expect(result.directRepeatCount).toBe(0); // 预览入口无历史
+    // bestLoss 明确为新的 J（balanced-v1 目标值）
+    expect(result.metrics.bestLoss).toBeGreaterThanOrEqual(0);
+  });
+
+  it("maps old lambda to new weights (0.5 -> 4B+2P)", () => {
+    expect(lambdaToWeights(0.5)).toEqual({ wB: 4, wP: 2, wO: 0.5, wE: 2, wH: 0 });
+    expect(lambdaToWeights(0)).toEqual({ wB: 8, wP: 0, wO: 0.5, wE: 2, wH: 0 });
+    expect(lambdaToWeights(1)).toEqual({ wB: 0, wP: 4, wO: 0.5, wE: 2, wH: 0 });
+  });
+
   it("can run with different seeds", () => {
     const r1 = optimizeSchedule({ ...input, seed: 1 });
     const r2 = optimizeSchedule({ ...input, seed: 2 });
@@ -81,8 +99,8 @@ describe("scheduler", () => {
         return 0.5;
       },
     });
-    // 常数 0.5 回调：所有 closeness 必须为 0；回调在每次 loss 评估都被调用
-    // （含模拟退火邻域），每次都收到一场四方阵容。
+    // 常数 0.5 回调：所有 closeness 必须为 0；回调在优化与指标计算中
+    // 都被调用，每次都收到一场四方阵容。
     expect(result.metrics.meanCloseness).toBe(0);
     expect(result.metrics.maxCloseness).toBe(0);
     expect(seen.length).toBeGreaterThanOrEqual(input.matches);
@@ -111,7 +129,7 @@ describe("scheduler", () => {
 
   it("is deterministic for the same seed with an injected callback", () => {
     const callback = (match: { a1: string; a2: string; b1: string; b2: string }) =>
-      (Number(match.a1) + Number(match.a2)) / 100;
+      (Number(match.a1.slice(1)) + Number(match.a2.slice(1))) / 20;
     const r1 = optimizeSchedule({ ...input, winProbability: callback });
     const r2 = optimizeSchedule({ ...input, winProbability: callback });
     expect(r1.schedule).toEqual(r2.schedule);

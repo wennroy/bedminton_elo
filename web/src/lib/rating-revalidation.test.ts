@@ -14,6 +14,8 @@ describe("RATING_REVALIDATE_PATHS 路径集合", () => {
       "/weekly",
       "/predict",
       "/schedule",
+      "/schedule/projects",
+      "/schedule/projects/[id] (page)",
       "/matches",
     ]) {
       expect(entries).toContain(expected);

@@ -7,6 +7,7 @@ import {
   MatchValidationError,
 } from "@/lib/match-validation";
 import { revalidateRatingPages } from "@/lib/rating-revalidation";
+import { noteMatchScoreEdited } from "@/lib/schedule-service";
 
 export async function PATCH(
   request: Request,
@@ -58,6 +59,9 @@ export async function PATCH(
     db.prepare(
       `UPDATE matches SET score_a = ?, score_b = ? WHERE id = ?`
     ).run(scoreA, scoreB, id);
+    // 若该比赛被排阵 fixture 引用（recorded），同步 bump 项目 revision/updated_at，
+    // 客户端据此刷新；fixture 保持 recorded，阵容与 generated_win_rate 不动。
+    noteMatchScoreEdited(id, db);
     revalidateRatingPages();
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -6,8 +6,13 @@ import { predictDoubles } from "@/lib/ratings/doubles";
 import type { RatingModel } from "@/lib/ratings/types";
 import { listPlayers, recomputeAllRatings } from "@/lib/repo";
 import { optimizeSchedule, type ScheduledMatch } from "@/lib/scheduler";
-import { createPlayer } from "@/lib/trueskill";
 import { predictElo } from "@/lib/elo";
+
+const MIN_PLAYERS = 4;
+const MAX_PLAYERS = 64;
+const MIN_MATCHES = 1;
+const MAX_MATCHES = 99;
+const MAX_SEED = 0xffffffff;
 
 interface PostBody {
   playerIds: number[];
@@ -37,17 +42,24 @@ function parsePostBody(body: Record<string, unknown>): PostBody | null {
   const rawModel = body.model ?? body.rating;
   const model = typeof rawModel === "string" ? rawModel : undefined;
 
-  if (!Array.isArray(rawIds) || rawIds.some((id) => !Number.isFinite(Number(id)))) {
+  if (
+    !Array.isArray(rawIds) ||
+    rawIds.some((id) => !Number.isFinite(Number(id)))
+  ) {
     return null;
   }
   const playerIds = rawIds.map((id) => Number(id));
 
   if (
-    playerIds.length < 4 ||
+    playerIds.length < MIN_PLAYERS ||
+    playerIds.length > MAX_PLAYERS ||
     new Set(playerIds).size !== playerIds.length ||
-    !Number.isFinite(matches) ||
-    matches < 1 ||
-    !Number.isFinite(seed) ||
+    !Number.isInteger(matches) ||
+    matches < MIN_MATCHES ||
+    matches > MAX_MATCHES ||
+    !Number.isInteger(seed) ||
+    seed < 0 ||
+    seed > MAX_SEED ||
     !Number.isFinite(lambda) ||
     lambda < 0 ||
     lambda > 1
@@ -177,34 +189,34 @@ export async function POST(request: Request) {
     return NextResponse.json({ schedule, metrics: result.metrics, names, ...meta });
   }
 
-  // legacy（默认）：TrueSkill 优化 + predictElo 展示胜率，旧语义逐比特保留。
+  // legacy（默认）：统一注入 predictElo 做优化和展示，不再
+  // TrueSkill 优化/Elo 展示混用——优化回调与 API 概率同一口径。
   const ratings = recomputeAllRatings();
   const eloRatings: Record<string, number> = Object.fromEntries(
     [...ratings].map(([id, r]) => [String(id), r.elo])
   );
-  const tsPlayers = input.playerIds.map((id) => {
-    const r = ratings.get(id);
-    return createPlayer(r?.mu ?? 25, r?.sigma ?? 8.333);
-  });
-
-  const result = optimizeSchedule({
-    playerIds: stringIds,
-    matches: input.matches,
-    players: tsPlayers,
-    seed,
-    lambda,
-  });
-
-  const schedule: ScheduleMatchOutput[] = result.schedule.map((match) => {
-    const winRate = predictElo(
+  const winProbability = (match: ScheduledMatch) =>
+    predictElo(
       match.a1,
       match.a2,
       match.b1,
       match.b2,
       eloRatings
     ).teamAWin;
-    return { ...match, winRate };
+
+  const result = optimizeSchedule({
+    playerIds: stringIds,
+    matches: input.matches,
+    players: [],
+    seed,
+    lambda,
+    winProbability,
   });
+
+  const schedule: ScheduleMatchOutput[] = result.schedule.map((match) => ({
+    ...match,
+    winRate: winProbability(match),
+  }));
   const meta: ScheduleModelMeta = {
     model: "legacy",
     configVersion: null,

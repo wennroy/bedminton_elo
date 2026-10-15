@@ -6,6 +6,7 @@ vi.mock("next/cache", () => ({
 import { tmpdir } from "os";
 import { join } from "path";
 import { unlinkSync } from "fs";
+import { randomUUID } from "node:crypto";
 import { closeDb, getDb } from "@/lib/db";
 import { addPlayer, listPlayers, listRawMatches } from "@/lib/repo";
 import * as repo from "@/lib/repo";
@@ -13,10 +14,15 @@ import * as ratingService from "@/lib/rating-service";
 import { initializeRatingConfig, readRatingConfig } from "@/lib/rating-config";
 import { replayRatings } from "@/lib/ratings/replay";
 import {
+  createProjectService,
+  recordFixtureScoreService,
+} from "@/lib/schedule-service";
+import { getProject } from "@/lib/schedule-projects";
+import {
   shanghaiLocalDateFromInstant,
   weekStart,
 } from "@/lib/ratings/calendar";
-import { POST } from "./route";
+import { POST, DELETE } from "./route";
 import { DELETE as deleteById } from "./[id]/route";
 
 function createRequest(body: object): Request {
@@ -498,5 +504,80 @@ describe.sequential("matches API", () => {
     } finally {
       spy.mockRestore();
     }
+  });
+
+  /** 建一个 legacy 项目并记一场比分，返回 { projectId, fixture, matchId }。 */
+  function setupScoredFixture() {
+    const db = getDb();
+    const playerIds = players.map(String);
+    const created = createProjectService({
+      name: "撤回联动",
+      playerIds,
+      matches: 1,
+      seed: 42,
+      model: "legacy",
+      actorId: playerIds[0],
+      requestId: randomUUID(),
+      db,
+    });
+    const fixture = created.project.fixtures[0];
+    const scored = recordFixtureScoreService({
+      projectId: created.project.id,
+      fixtureId: fixture.id,
+      scoreA: 21,
+      scoreB: 9,
+      expectedFixtureRevision: fixture.revision,
+      actorId: playerIds[0],
+      playedAt: shanghaiToday(),
+      db,
+    });
+    return { projectId: created.project.id, fixtureId: fixture.id, matchId: scored.id };
+  }
+
+  it("DELETE ?id= 撤回项目比赛：场次回 played_unscored、保留 played_at、可重新记分", async () => {
+    const { projectId, fixtureId, matchId } = setupScoredFixture();
+
+    const response = await DELETE(
+      new Request(`http://localhost/api/matches?id=${matchId}`, { method: "DELETE" })
+    );
+    expect(response.status).toBe(200);
+
+    const fixture = getProject(projectId, getDb()).fixtures.find(
+      (f) => f.id === fixtureId
+    )!;
+    expect(fixture.status).toBe("played_unscored");
+    expect(fixture.matchId).toBeNull();
+    expect(fixture.playedAt).toBe(shanghaiToday());
+    expect(listRawMatches(getDb())).toHaveLength(0);
+
+    // 可重新登记比分。
+    const rescored = recordFixtureScoreService({
+      projectId,
+      fixtureId,
+      scoreA: 18,
+      scoreB: 21,
+      expectedFixtureRevision: fixture.revision,
+      actorId: players[0].toString(),
+      db: getDb(),
+    });
+    expect(rescored.fixture?.status).toBe("recorded");
+  });
+
+  it("DELETE /[id] 同样恢复 played_unscored（两条撤回入口同一撤回服务）", async () => {
+    const { projectId, fixtureId, matchId } = setupScoredFixture();
+
+    const response = await deleteById(
+      new Request(`http://localhost/api/matches/${matchId}`, { method: "DELETE" }),
+      { params: Promise.resolve({ id: String(matchId) }) }
+    );
+    expect(response.status).toBe(200);
+
+    const fixture = getProject(projectId, getDb()).fixtures.find(
+      (f) => f.id === fixtureId
+    )!;
+    expect(fixture.status).toBe("played_unscored");
+    expect(fixture.matchId).toBeNull();
+    expect(fixture.scoreA).toBeNull();
+    expect(listRawMatches(getDb())).toHaveLength(0);
   });
 });

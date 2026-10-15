@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { tmpdir } from "os";
 import { join } from "path";
 import { unlinkSync } from "fs";
+import { randomUUID } from "node:crypto";
 import { closeDb, getDb } from "@/lib/db";
 import {
   addMatch,
@@ -33,6 +34,11 @@ import {
 import {
   RATING_REVALIDATE_PATHS,
 } from "@/lib/rating-revalidation";
+import {
+  createProjectService,
+  recordFixtureScoreService,
+} from "@/lib/schedule-service";
+import { getProject } from "@/lib/schedule-projects";
 import { POST as matchesPOST, DELETE as matchesDELETE } from "@/app/api/matches/route";
 import { DELETE as matchDeleteById } from "@/app/api/matches/[id]/route";
 import { PATCH as adminMatchPatch } from "@/app/api/admin/matches/[id]/route";
@@ -533,5 +539,245 @@ describe.sequential("rating mutations 全链路一致性", () => {
     expect(response.status).toBeLessThan(300);
     expect(revalidatePathMock.mock.calls).toEqual(EXPECTED_REVALIDATE_CALLS);
     expect(revalidatePathMock).toHaveBeenCalledTimes(RATING_REVALIDATE_PATHS.length);
+  });
+
+  it("admin 改分：被 fixture 引用的比赛改分后项目 revision++（客户端刷新），fixture 保持 recorded", async () => {
+    const db = getDb();
+    const playerIds = players.map(String);
+    const created = createProjectService({
+      name: "改分联动",
+      playerIds,
+      matches: 1,
+      seed: 42,
+      model: "legacy",
+      actorId: playerIds[0],
+      requestId: randomUUID(),
+      db,
+    });
+    const fixture = created.project.fixtures[0];
+    const scored = recordFixtureScoreService({
+      projectId: created.project.id,
+      fixtureId: fixture.id,
+      scoreA: 21,
+      scoreB: 9,
+      expectedFixtureRevision: fixture.revision,
+      actorId: playerIds[0],
+      playedAt: shanghaiToday(),
+      db,
+    });
+    const revisionBefore = getProject(created.project.id, db).revision;
+
+    const patchResponse = await adminMatchPatch(
+      new Request(`http://localhost/api/admin/matches/${scored.id}`, {
+        method: "PATCH",
+        headers: adminHeaders(),
+        body: JSON.stringify({ scoreA: 21, scoreB: 5 }),
+      }),
+      { params: Promise.resolve({ id: String(scored.id) }) }
+    );
+    expect(patchResponse.status).toBe(200);
+
+    const detail = getProject(created.project.id, db);
+    expect(detail.revision).toBe(revisionBefore + 1);
+    const after = detail.fixtures.find((f) => f.id === fixture.id)!;
+    expect(after.status).toBe("recorded");
+    expect(after.scoreA).toBe(21);
+    expect(after.scoreB).toBe(5);
+  });
+
+  it("admin merge 三类冲突全部拒绝且无部分改写", async () => {
+    const db = getDb();
+    const [A, B, C, D, E] = players;
+    const F = addPlayer("F", db);
+
+    // 冲突 1：合并后真实比赛同场双人。
+    addMatch(
+      { pa1: A, pa2: B, pb1: C, pb2: D, scoreA: 21, scoreB: 15, playedAt: shanghaiToday() },
+      db
+    );
+    const dupMatch = await adminMergePOST(
+      new Request(`http://localhost/api/admin/players/${A}/merge`, {
+        method: "POST",
+        headers: adminHeaders(),
+        body: JSON.stringify({ toId: B }),
+      }),
+      { params: Promise.resolve({ id: String(A) }) }
+    );
+    expect(dupMatch.status).toBe(400);
+    expect((await dupMatch.json()).error).toContain("同场重复球员");
+    const raw = listRawMatches(db);
+    expect(raw[0].pa1).toBe(A);
+    expect(raw[0].pa2).toBe(B);
+    // 两球员都还在。
+    expect(listPlayers(db).some((p) => p.id === A)).toBe(true);
+    expect(listPlayers(db).some((p) => p.id === B)).toBe(true);
+    db.prepare(`DELETE FROM matches`).run();
+
+    // 冲突 2：合并后 fixture 同场双人。
+    const created = createProjectService({
+      name: "合并冲突",
+      playerIds: [A, C, D, E].map(String),
+      matches: 1,
+      seed: 42,
+      model: "legacy",
+      actorId: String(A),
+      requestId: randomUUID(),
+      db,
+    });
+    const fixture = created.project.fixtures[0];
+    // 找一个非 A 的槽位写入 B，制造 A/B 同场。
+    const cols = ["pa1", "pa2", "pb1", "pb2"] as const;
+    const slotValues = cols.map((c) => (fixture as unknown as Record<string, string>)[c]);
+    const slotIndex = slotValues.findIndex((v) => v !== String(A));
+    const targetCol = cols[slotIndex];
+    db.prepare(`UPDATE schedule_fixtures SET ${targetCol} = ? WHERE id = ?`).run(String(B), fixture.id);
+    const revisionBefore = getProject(created.project.id, db).revision;
+    const dupFixture = await adminMergePOST(
+      new Request(`http://localhost/api/admin/players/${A}/merge`, {
+        method: "POST",
+        headers: adminHeaders(),
+        body: JSON.stringify({ toId: B }),
+      }),
+      { params: Promise.resolve({ id: String(A) }) }
+    );
+    expect(dupFixture.status).toBe(400);
+    expect((await dupFixture.json()).error).toContain("同场重复球员");
+    const fxAfter = getProject(created.project.id, db).fixtures.find((f) => f.id === fixture.id)!;
+    expect((fxAfter as unknown as Record<string, string>)[targetCol]).toBe(String(B));
+    expect(getProject(created.project.id, db).revision).toBe(revisionBefore);
+
+    // 冲突 3：同项目双人成员（E 在项目里，把 C 并入 E）。
+    const sharedMember = await adminMergePOST(
+      new Request(`http://localhost/api/admin/players/${C}/merge`, {
+        method: "POST",
+        headers: adminHeaders(),
+        body: JSON.stringify({ toId: E }),
+      }),
+      { params: Promise.resolve({ id: String(C) }) }
+    );
+    expect(sharedMember.status).toBe(400);
+    expect((await sharedMember.json()).error).toContain("均有成员记录");
+
+    // 目标不存在。
+    const missingTarget = await adminMergePOST(
+      new Request(`http://localhost/api/admin/players/${F}/merge`, {
+        method: "POST",
+        headers: adminHeaders(),
+        body: JSON.stringify({ toId: 99999 }),
+      }),
+      { params: Promise.resolve({ id: String(F) }) }
+    );
+    expect(missingTarget.status).toBe(400);
+    expect(listPlayers(db).some((p) => p.id === F)).toBe(true);
+  });
+
+  it("admin merge 无冲突：迁移 matches 与全部排阵引用，bump 受影响项目", async () => {
+    const db = getDb();
+    const [A, B, C, D, E] = players;
+    const created = createProjectService({
+      name: "合并成功",
+      playerIds: [A, B, C, D].map(String),
+      matches: 2,
+      seed: 42,
+      model: "legacy",
+      actorId: String(A),
+      requestId: randomUUID(),
+      db,
+    });
+    const projectId = created.project.id;
+    const fixture = created.project.fixtures[0];
+    const revisionBefore = created.project.revision;
+
+    // A 打一场真实比赛（与 E 不同场）。
+    const m = addMatch(
+      { pa1: A, pa2: B, pb1: C, pb2: D, scoreA: 21, scoreB: 15, playedAt: shanghaiToday() },
+      db
+    );
+
+    const response = await adminMergePOST(
+      new Request(`http://localhost/api/admin/players/${A}/merge`, {
+        method: "POST",
+        headers: adminHeaders(),
+        body: JSON.stringify({ toId: E }),
+      }),
+      { params: Promise.resolve({ id: String(A) }) }
+    );
+    expect(response.status).toBe(200);
+
+    // matches 引用迁移到 E。
+    const raw = listRawMatches(db).find((r) => r.id === m)!;
+    expect(raw.pa1).toBe(E);
+    // 成员行迁移。
+    const detail = getProject(projectId, db);
+    expect(detail.members.map((mm) => mm.playerId)).not.toContain(String(A));
+    expect(detail.members.map((mm) => mm.playerId)).toContain(String(E));
+    // fixture 槽位迁移（TEXT）。
+    const fx = detail.fixtures.find((f) => f.id === fixture.id)!;
+    expect([fx.pa1, fx.pa2, fx.pb1, fx.pb2]).not.toContain(String(A));
+    // created_by 迁移。
+    expect(detail.createdBy).toBe(String(E));
+    // 受影响项目 revision++。
+    expect(detail.revision).toBe(revisionBefore + 1);
+    // 旧球员删除。
+    expect(listPlayers(db).some((p) => p.id === A)).toBe(false);
+  });
+
+  it("admin 删除球员：有排阵成员/fixture/操作者引用时拒绝并说明", async () => {
+    const db = getDb();
+    const playerIds = players.map(String);
+    createProjectService({
+      name: "删除保护",
+      playerIds,
+      matches: 1,
+      seed: 42,
+      model: "legacy",
+      actorId: playerIds[0],
+      requestId: randomUUID(),
+      db,
+    });
+
+    const response = await adminPlayerDELETE(
+      new Request(`http://localhost/api/admin/players/${players[0]}`, {
+        method: "DELETE",
+        headers: adminHeaders(),
+      }),
+      { params: Promise.resolve({ id: String(players[0]) }) }
+    );
+    expect(response.status).toBe(400);
+    expect((await response.json()).error).toContain("排阵项目");
+    expect(listPlayers(db).some((p) => p.id === players[0])).toBe(true);
+  });
+
+  it("写入口成功后调用全部评分 revalidate 路径（含排阵项目页）", async () => {
+    revalidatePathMock.mockClear();
+    const db = getDb();
+    const playerIds = players.map(String);
+    const created = createProjectService({
+      name: "刷新链路",
+      playerIds,
+      matches: 1,
+      seed: 42,
+      model: "legacy",
+      actorId: playerIds[0],
+      requestId: randomUUID(),
+      db,
+    });
+    const fixture = created.project.fixtures[0];
+    await recordFixtureScoreService({
+      projectId: created.project.id,
+      fixtureId: fixture.id,
+      scoreA: 21,
+      scoreB: 9,
+      expectedFixtureRevision: fixture.revision,
+      actorId: playerIds[0],
+      playedAt: shanghaiToday(),
+      db,
+    });
+    expect(revalidatePathMock.mock.calls).toEqual(EXPECTED_REVALIDATE_CALLS);
+    expect(revalidatePathMock).toHaveBeenCalledTimes(RATING_REVALIDATE_PATHS.length);
+    // 排阵项目页也在失效集合内。
+    const paths = revalidatePathMock.mock.calls.map((call) => call[0]);
+    expect(paths).toContain("/schedule/projects");
+    expect(paths).toContain("/schedule/projects/[id]");
   });
 });

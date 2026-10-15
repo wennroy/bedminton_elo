@@ -7,6 +7,7 @@ import {
   TS_MU,
   TS_SIGMA,
 } from "./trueskill";
+import { withdrawMatch } from "./match-recording";
 
 export interface Player {
   id: number;
@@ -216,9 +217,13 @@ export function listMatchesByDate(db?: Database.Database): MatchWithNames[] {
   return rows;
 }
 
+/**
+ * 删除比赛：统一走撤回服务——若该行被排阵 fixture 引用，同一事务内先
+ * 解除关联（recorded → played_unscored，保留 played_at）再删除，
+ * 保证不出现「比分已解除但比赛还在」的中间态。
+ */
 export function deleteMatch(id: number, db?: Database.Database): void {
-  const conn = resolveDb(db);
-  conn.prepare(`DELETE FROM matches WHERE id = ?`).run(id);
+  withdrawMatch(id, db);
 }
 
 export function recomputeAllRatings(db?: Database.Database): Map<number, PlayerRatings> {

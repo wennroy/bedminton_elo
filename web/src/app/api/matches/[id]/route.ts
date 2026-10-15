@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { deleteMatch } from "@/lib/repo";
 import { revalidateRatingPages } from "@/lib/rating-revalidation";
 
 const TEN_MINUTES = 10 * 60 * 1000;
@@ -34,7 +35,8 @@ export async function DELETE(
       );
     }
 
-    db.prepare("DELETE FROM matches WHERE id = ?").run(id);
+    // 走统一撤回服务：被排阵 fixture 引用时同事务解除关联再删除。
+    deleteMatch(id, db);
     revalidateRatingPages();
     return NextResponse.json({ success: true });
   } catch (error) {

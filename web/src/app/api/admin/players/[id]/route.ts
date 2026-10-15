@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { isAdminKey } from "@/lib/admin";
 import { revalidateRatingPages } from "@/lib/rating-revalidation";
+import { scheduleReferenceBlockReason } from "@/lib/schedule-service";
 
 export async function DELETE(
   request: Request,
@@ -20,6 +21,11 @@ export async function DELETE(
 
   try {
     const db = getDb();
+    // 排阵引用预检：有任何项目成员（含历史）/fixture/操作者引用时拒绝并说明。
+    const scheduleBlock = scheduleReferenceBlockReason(id, db);
+    if (scheduleBlock) {
+      return NextResponse.json({ error: scheduleBlock }, { status: 400 });
+    }
     const count = db
       .prepare(
         `SELECT COUNT(*) AS c FROM matches

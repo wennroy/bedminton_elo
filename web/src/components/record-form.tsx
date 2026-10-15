@@ -18,7 +18,13 @@ import { getMyPlayerId, setMyPlayerId } from "@/lib/identity";
 import { shanghaiLocalDateFromInstant } from "@/lib/ratings/calendar";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { IdentityPicker } from "@/components/identity-picker";
-import { EloDeltaCard, type EloDeltaPlayer } from "@/components/elo-delta-card";
+import { type EloDeltaPlayer } from "@/components/elo-delta-card";
+import {
+  MatchRatingResult,
+  ratingResultDescription,
+  type MatchRatingFieldClient,
+} from "@/components/match-rating-result";
+import { ScoreInput } from "@/components/score-input";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -61,78 +67,9 @@ interface RecordFormProps {
 
 type Slot = number | null;
 
-/** POST /api/matches 响应 rating 字段的客户端形状（MatchRatingField 三态）。 */
-interface RatingChange {
-  playerId: number;
-  before: { r: number; rd: number; volatility: number };
-  after: { r: number; rd: number; volatility: number };
-  delta: number;
-}
-
-type MatchRatingFieldClient =
-  | {
-      state: "ready";
-      model: "glicko2";
-      configVersion: string;
-      asOf: string;
-      segmentId: string;
-      estimate: {
-        matchId: number;
-        playedAt: string;
-        preWinA: number;
-        changes: RatingChange[];
-      };
-      historyRecomputed: boolean;
-    }
-  | { state: "pending"; model: "glicko2"; reason: string }
-  | { state: "not_effective"; model: "glicko2"; reason: string };
-
 function todayString(): string {
   // 营业日以 Asia/Shanghai 为准，与评分引擎口径一致，不随服务器时区漂移
   return shanghaiLocalDateFromInstant(new Date().toISOString());
-}
-
-function notEffectiveDetail(rating: { reason: string }): string {
-  if (rating.reason.includes("not yet effective")) {
-    return "该比赛日期晚于当前评分时点，尚未产生新版计分；未来比赛不展示涨跌，到对应时段结算后生效。";
-  }
-  if (rating.reason === "rating config not initialized") {
-    return "新版评分未启用，本次记录未产生新版计分。";
-  }
-  return `该记录未产生新版计分：${rating.reason}`;
-}
-
-/** ready：按提交槽位顺序把 estimate.changes（RatingState）映射为展示行。 */
-function estimatePlayers(
-  rating: Extract<MatchRatingFieldClient, { state: "ready" }>,
-  slotIds: [Slot, Slot, Slot, Slot],
-  playerMap: Map<number, Player>
-): EloDeltaPlayer[] {
-  const byId = new Map(
-    rating.estimate.changes.map((change) => [change.playerId, change])
-  );
-  const players: EloDeltaPlayer[] = [];
-  for (const id of slotIds) {
-    if (id === null) continue;
-    const change = byId.get(id);
-    if (!change) continue;
-    players.push({
-      id,
-      name: playerMap.get(id)?.name ?? "?",
-      before: change.before.r,
-      after: change.after.r,
-    });
-  }
-  return players;
-}
-
-function resultDescription(rating: MatchRatingFieldClient | null): string {
-  if (rating === null) return "四位球员的 ELO 已更新";
-  if (rating.state === "ready") {
-    return "新版评分已更新（Estimated 预估，周一正式结算）";
-  }
-  if (rating.state === "pending") return "比赛已保存，新版积分暂未更新";
-  return "该记录未产生新版计分";
 }
 
 export function RecordForm({ players, initialSlots, matches }: RecordFormProps) {
@@ -234,13 +171,6 @@ export function RecordForm({ players, initialSlots, matches }: RecordFormProps) 
       return next;
     });
     setPickerSlot(null);
-  }
-
-  function adjustScore(team: 0 | 1, delta: number) {
-    const setter = team === 0 ? setScoreA : setScoreB;
-    setter((value) =>
-      Math.max(0, Math.min(99, (Number.isFinite(value) ? value : 0) + delta))
-    );
   }
 
   function swapSides() {
@@ -432,44 +362,7 @@ export function RecordForm({ players, initialSlots, matches }: RecordFormProps) 
             );
           })}
         </div>
-        <input
-          type="number"
-          inputMode="numeric"
-          min={0}
-          max={99}
-          step={1}
-          value={Number.isFinite(score) ? score : ""}
-          onChange={(e) => {
-            const raw = e.target.value;
-            setScore(raw === "" ? NaN : Number(raw));
-          }}
-          aria-label={`${label}队比分`}
-          className="w-full min-w-0 appearance-none border-0 bg-transparent py-3 text-center font-num text-[84px] leading-none font-bold tracking-[-4px] outline-none min-[761px]:py-[17px] min-[761px]:pb-3 min-[761px]:text-[103px] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-          style={{
-            color: team === 0 ? "var(--team-a)" : "var(--team-b)",
-            MozAppearance: "textfield",
-          }}
-        />
-        <div className="flex justify-center gap-[9px] min-[761px]:gap-2.5">
-          <button
-            type="button"
-            onClick={() => adjustScore(team, -1)}
-            disabled={!(score > 0)}
-            aria-label={`${label}队减一分`}
-            className="h-[46px] w-[54px] rounded-lg border border-[#617057] text-[22px] text-[#f0f4e9] transition-colors hover:bg-[#ffffff0d] disabled:opacity-40 min-[761px]:h-11 min-[761px]:w-[58px]"
-          >
-            −
-          </button>
-          <button
-            type="button"
-            onClick={() => adjustScore(team, 1)}
-            disabled={!(score < 99)}
-            aria-label={`${label}队加一分`}
-            className="h-[46px] w-[54px] rounded-lg border border-[#617057] bg-[#ffffff12] text-[22px] text-[#f0f4e9] transition-colors hover:bg-[#ffffff1f] disabled:opacity-40 min-[761px]:h-11 min-[761px]:w-[58px]"
-          >
-            +
-          </button>
-        </div>
+        <ScoreInput team={team} score={score} onScoreChange={setScore} />
       </div>
     );
   };
@@ -865,56 +758,17 @@ export function RecordForm({ players, initialSlots, matches }: RecordFormProps) 
               比赛已记录
             </DialogTitle>
             <DialogDescription className="text-center">
-              {resultDescription(result?.rating ?? null)}
+              {ratingResultDescription(result?.rating ?? null)}
             </DialogDescription>
           </DialogHeader>
           {result && (
-            <div className="flex flex-col gap-3">
-              {result.rating?.state === "ready" ? (
-                <>
-                  <EloDeltaCard
-                    players={estimatePlayers(
-                      result.rating,
-                      result.slotIds,
-                      playerMap
-                    )}
-                    caption={`新版评分 · Estimated 预估 · 模型 ${result.rating.configVersion}`}
-                  />
-                  {result.rating.historyRecomputed ? (
-                    <p className="text-center text-[10px] leading-relaxed text-muted-foreground">
-                      该场属于已结算的历史区段：补录已重算下游当前分，
-                      以上为该场自身的单场变化。
-                    </p>
-                  ) : null}
-                </>
-              ) : null}
-              {result.rating?.state === "pending" ? (
-                <p className="rounded-xl border border-dashed border-loss/50 bg-loss-bg p-3 text-xs leading-relaxed text-loss">
-                  比赛已保存，新版积分暂未更新（{result.rating.reason}
-                  ）。评分恢复后会自动更新，无需重复提交。
-                </p>
-              ) : null}
-              {result.rating?.state === "not_effective" ? (
-                <p className="rounded-xl border border-dashed border-border bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground">
-                  {notEffectiveDetail(result.rating)}
-                </p>
-              ) : null}
-              {result.legacyAvailable && result.players.length > 0 ? (
-                <EloDeltaCard
-                  players={result.players}
-                  caption={
-                    result.rating?.state === "ready" ||
-                    result.rating?.state === "pending"
-                      ? "Legacy ELO 参考"
-                      : "ELO"
-                  }
-                />
-              ) : (
-                <p className="text-center text-xs text-muted-foreground">
-                  旧版 ELO 前后对比暂不可用。
-                </p>
-              )}
-            </div>
+            <MatchRatingResult
+              rating={result.rating}
+              legacyPlayers={result.players}
+              legacyAvailable={result.legacyAvailable}
+              slotIds={result.slotIds}
+              playerMap={playerMap}
+            />
           )}
           <div className="flex gap-2.5">
             <Button

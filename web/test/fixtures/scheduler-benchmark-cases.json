@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "purpose": "doubles-scheduling T6 benchmark matrix: engine hard-assertion grid, quality reporting, service-layer warm p95",
+  "engine": {
+    "seeds": [
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+      11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+      21, 22, 23, 24, 25, 26, 27, 28, 29, 30
+    ],
+    "baseDistribution": "gradient",
+    "baseHistory": "empty",
+    "matrixN": [4, 5, 7, 8, 10, 12, 16],
+    "matrixM": [1, 4, 8, 16],
+    "variants": [
+      { "id": "equal-N10-M8", "N": 10, "M": 8, "distribution": "equal", "history": "empty" },
+      { "id": "one-strong-N10-M8", "N": 10, "M": 8, "distribution": "one-strong", "history": "empty" },
+      { "id": "polarized-N10-M8", "N": 10, "M": 8, "distribution": "polarized", "history": "empty" },
+      { "id": "gradient-one-played-N10-M8", "N": 10, "M": 8, "distribution": "gradient", "history": "one-played" },
+      { "id": "gradient-three-splits-N10-M8", "N": 10, "M": 8, "distribution": "gradient", "history": "three-splits" },
+      { "id": "gradient-accumulated-N10-M8", "N": 10, "M": 8, "distribution": "gradient", "history": "accumulated" },
+      { "id": "polarized-accumulated-N16-M16", "N": 16, "M": 16, "distribution": "polarized", "history": "accumulated" }
+    ],
+    "boundary": {
+      "id": "boundary-N64-M99",
+      "N": 64,
+      "M": 99,
+      "distribution": "gradient",
+      "history": "empty",
+      "seeds": [1, 2, 3]
+    },
+    "checkbox": {
+      "id": "checkbox-N8-M4",
+      "N": 8,
+      "M": 4,
+      "distribution": "equal",
+      "history": "one-played",
+      "seeds": [
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+        11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+        21, 22, 23, 24, 25, 26, 27, 28, 29, 30
+      ]
+    }
+  },
+  "service": {
+    "commonScaleP95TargetMs": 3000,
+    "cases": [
+      { "id": "svc-N8-M8", "N": 8, "M": 8, "repetitions": 15 },
+      { "id": "svc-N12-M12", "N": 12, "M": 12, "repetitions": 15 },
+      { "id": "svc-N16-M20", "N": 16, "M": 20, "repetitions": 15 },
+      { "id": "svc-N64-M99", "N": 64, "M": 99, "repetitions": 3 }
+    ],
+    "regenCase": { "N": 12, "M": 6, "rounds": 3 }
+  },
+  "golden": {
+    "old": "test/golden/scheduler.json",
+    "note": "pre-v2 SA 输出仅作历史参考；同一输入过 optimizeSchedule（新引擎适配层）后分列对比，不承诺全维度改善"
+  }
+}

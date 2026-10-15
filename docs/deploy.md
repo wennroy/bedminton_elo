@@ -107,3 +107,32 @@ docker compose exec web node -e "const db=require('better-sqlite3')('/data/badmi
    比赛数与原始赛果不受影响，新版配置与历史保留，确认后可再切回。
 
 版本说明：本次变更为重要新功能，发版预计按大版本 **2.0.0** 执行（发版时以 `scripts/release.sh` 与 CHANGELOG 实际核对为准）。
+
+## 排阵项目（配对）部署与回退注意
+
+### 建表与连接口径
+
+- 排阵项目新增四张表：`schedule_projects`、`schedule_project_players`、`schedule_generations`、`schedule_fixtures`。全部由 `web/src/lib/schema.sql` 的 `CREATE TABLE IF NOT EXISTS` 幂等创建，`db.ts` 每次开库自动执行 schema，**compose 重建后自动生效，无需迁移脚本**。
+- `db.ts` 现在开库时显式 `PRAGMA foreign_keys=ON`：排阵表的跨表外键（fixtures→projects/generations、match_id→matches 等）依赖此开关，SQLite 默认关闭。**用 sqlite3 CLI 手工连库操作时务必先执行 `PRAGMA foreign_keys=ON;`**，否则排阵表约束不生效、且可能与应用行为不一致。
+
+### 发布步骤
+
+1. **部署前在线备份**（必须）：沿用上文「操作数据库前」的 `.backup` 在线一致性备份流程，不要只复制主库文件（WAL 里可能有未合并数据）。
+2. 正常发版：`git pull --ff-only` → `docker compose up -d --build`（schema 自动建表）。
+3. **部署后验证**：
+
+   ```bash
+   cd ~/proj/bedminton_elo/web
+   docker compose exec web node -e "const db=require('better-sqlite3')('/data/badminton.db'); const v=db.pragma('foreign_key_check'); console.log('fk violations:', v.length); db.close();"
+   ```
+
+   必须输出 `fk violations: 0`。
+
+   冒烟清单（网页手动过一遍）：配对页出现项目列表；创建共享项目后**换另一个身份**可见；项目改名生效；标记一场「已打」后列表状态正确；续排增删名单后已打记录保留、新成员从公平起点排；配对卡片快速记分成功且**同一场不能重复登记**；已录比分可撤回恢复；勾选与不勾选「减少已打对阵重复」各续排一次，输出不同且都合法。
+
+### 回退注意
+
+- 回退到旧版本镜像后，旧代码**不认识 `schedule_*` 四张表**，但项目里录入的比分事实仍写在 `matches` 表（与旧站共用），比赛数据不丢。
+- **回退期间暂停项目比赛的手工补录**：旧版 UI 无法关联 fixture，手工补录会造成比分与项目脱节（fixture 仍显示未录）。
+- 恢复新版后先跑 `foreign_key_check`（命令同上），再抽查：项目列表/详情正常、`schedule_fixtures.match_id` 与 `matches` 一一对应、已打计数与 revision 一致、被撤回的比分状态正确。发现脱节优先用最近备份恢复，不要手工改库。
+- 只有在确定**彻底放弃**排阵项目数据时才考虑清空四表（先备份）；清表后项目历史不可恢复。
