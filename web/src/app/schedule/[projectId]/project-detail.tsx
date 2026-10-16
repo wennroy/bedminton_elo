@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  BookOpen,
   ChevronRight,
   Pencil,
   Plus,
@@ -280,8 +281,18 @@ export function ProjectDetailClient({
   return (
     <div data-revision={project.revision} className="flex flex-col gap-5">
       <div>
-        <div className="text-[10px] font-bold tracking-[2px] text-muted-foreground max-[760px]:text-[9px]">
-          SCHEDULE PROJECT
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-[10px] font-bold tracking-[2px] text-muted-foreground max-[760px]:text-[9px]">
+            SCHEDULE PROJECT
+          </div>
+          <Link
+            href="/methodology/pairing"
+            title="配对方式说明"
+            className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <BookOpen className="size-3" strokeWidth={1.65} />
+            <span className="hidden min-[761px]:inline">配对方式</span>
+          </Link>
         </div>
         {renaming ? (
           <div className="mt-2 flex flex-wrap items-center gap-2">

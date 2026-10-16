@@ -71,6 +71,7 @@ const pageTitles: [RegExp, string][] = [
   [/^\/predict/, "预测"],
   [/^\/me\/?$/, "我的"],
   [/^\/changelog/, "更新日志"],
+  [/^\/methodology\/pairing/, "配对方式"],
   [/^\/methodology/, "计分方式"],
   [/^\/admin/, "管理"],
 ];

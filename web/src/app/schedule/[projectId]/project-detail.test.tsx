@@ -215,6 +215,19 @@ describe("ProjectDetailClient（/schedule/[projectId] 详情）", () => {
     expect(screen.getAllByText("已打 0 · 待打 2")).toHaveLength(2);
   });
 
+  it("页头有配对方式说明书入口链接", () => {
+    render(
+      <ProjectDetailClient
+        initialProject={makeProject()}
+        initialNames={NAMES}
+        directory={DIRECTORY}
+      />
+    );
+    const link = screen.getByRole("link", { name: "配对方式" });
+    expect(link.getAttribute("href")).toBe("/methodology/pairing");
+    expect(link.getAttribute("title")).toBe("配对方式说明");
+  });
+
   it("续排旁注按详情数据现算 X/Y，checkbox 回显上代选择", () => {
     render(
       <ProjectDetailClient
