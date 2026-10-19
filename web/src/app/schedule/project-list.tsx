@@ -116,6 +116,7 @@ export function ProjectList({ initialProjects, initialNextCursor }: ProjectListP
                 </span>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                {p.mode === "guo" && <span className="rounded bg-win-bg px-1.5 py-0.5 font-semibold text-win">郭老师分配方法</span>}
                 <span>{p.activePlayers} 人在名单</span>
                 <span>待打 {p.pendingCount}</span>
                 <span>已打待录分 {p.playedUnscoredCount}</span>

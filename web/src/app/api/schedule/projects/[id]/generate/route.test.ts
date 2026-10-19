@@ -10,7 +10,7 @@ import { join } from "path";
 import { unlinkSync } from "fs";
 import { closeDb, getDb } from "@/lib/db";
 import { addPlayer } from "@/lib/repo";
-import { createProjectService } from "@/lib/schedule-service";
+import { createProjectService, recordFixtureScoreService } from "@/lib/schedule-service";
 import { getProject } from "@/lib/schedule-projects";
 import { POST } from "./route";
 
@@ -64,6 +64,30 @@ describe.sequential("schedule project generate API（续排）", () => {
       db: getDb(),
     });
   }
+
+  it("郭老师方法用同一续排接口开启下一轮，拒绝未完成轮次与名单改动", async () => {
+    const roster = [...players, ...["F", "G", "H"].map((name) => String(addPlayer(name)))];
+    const created = createProjectService({mode: "guo", playerIds: roster, actorId: roster[0], requestId: randomUUID(), model: "legacy", db: getDb()}).project;
+    const payload = {actorId: roster[0], requestId: randomUUID(), expectedRevision: created.revision};
+    const blocked = await POST(postRequest(created.id, payload), params(created.id));
+    expect(blocked.status).toBe(409);
+    expect((await blocked.json()).code).toBe("state_conflict");
+    const bypass = await POST(postRequest(created.id, {...payload, matches:0, playerIds:roster.slice(1)}), params(created.id));
+    expect(bypass.status).toBe(400);
+    for (const f of created.fixtures) {
+      recordFixtureScoreService({projectId:created.id,fixtureId:f.id,scoreA:21,scoreB:18,expectedFixtureRevision:0,actorId:roster[0],db:getDb()});
+    }
+    const finished = getProject(created.id,getDb());
+    const nextPayload = {...payload, expectedRevision:finished.revision};
+    const next = await POST(postRequest(created.id,nextPayload),params(created.id));
+    expect(next.status).toBe(201);
+    const json = await next.json();
+    expect(json.project.guo.rounds).toHaveLength(2);
+    expect(json.fixtures).toHaveLength(6);
+    expect(json.supersededCount).toBe(0);
+    const retry = await POST(postRequest(created.id,nextPayload),params(created.id));
+    expect((await retry.json()).replayed).toBe(true);
+  });
 
   it("POST 201 续排：旧 pending superseded，新 fixtures 从 next_fixture_no 续号", async () => {
     const created = createProject();

@@ -4,6 +4,8 @@
  * 类型在此按 API 合同镜像维护（与 lib/schedule-projects.ts 结构对齐）。
  */
 
+import type { GuoProjectState } from "@/lib/scheduling/guo";
+
 export type FixtureStatus = "pending" | "played_unscored" | "recorded" | "superseded";
 
 export interface Fixture {
@@ -41,6 +43,7 @@ export interface ProjectMember {
 }
 
 export interface ProjectSummary {
+  mode?: "guo";
   id: number;
   name: string;
   model: string;
@@ -55,6 +58,7 @@ export interface ProjectSummary {
 }
 
 export interface ProjectDetail {
+  guo?: GuoProjectState;
   id: number;
   name: string;
   model: string;
