@@ -52,6 +52,21 @@ describe.sequential("schedule projects API（列表 + 创建）", () => {
     }
   });
 
+  it("POST guo 创建八人固定分组，GET 返回模式，省略 seed 的请求可重放", async () => {
+    const roster = [...players, ...["F", "G", "H"].map((name) => String(addPlayer(name)))];
+    const payload = {mode: "guo", playerIds: roster, actorId: roster[0], requestId: randomUUID(), model: "legacy"};
+    const first = await POST(postRequest(payload));
+    expect(first.status).toBe(201);
+    const json = await first.json();
+    expect(json.project.guo.rounds[0].groupA).toHaveLength(4);
+    expect(json.project.guo.rounds[0].groupB).toHaveLength(4);
+    expect(json.project.fixtures).toHaveLength(6);
+    const retry = await POST(postRequest(payload));
+    expect((await retry.json()).replayed).toBe(true);
+    const list = await GET(getRequest());
+    expect((await list.json()).projects[0].mode).toBe("guo");
+  });
+
   it("POST 201：创建项目并返回首批场次与姓名映射", async () => {
     const response = await POST(
       postRequest({

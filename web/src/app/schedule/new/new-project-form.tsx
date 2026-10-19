@@ -25,6 +25,7 @@ export function NewProjectForm({ players }: { players: Player[] }) {
   const [directory, setDirectory] = React.useState<Player[]>(players);
   const [selected, setSelected] = React.useState<Set<number>>(new Set());
   const [matches, setMatches] = React.useState(4);
+  const [mode, setMode] = React.useState<"balanced" | "guo">("balanced");
   const [avoidRematch, setAvoidRematch] = React.useState(true);
   const [name, setName] = React.useState("");
   const [advancedOpen, setAdvancedOpen] = React.useState(false);
@@ -70,7 +71,7 @@ export function NewProjectForm({ players }: { players: Player[] }) {
 
   React.useEffect(() => {
     setRequestId(null);
-  }, [selected, matches, avoidRematch, name, seed]);
+  }, [selected, matches, avoidRematch, name, seed, mode]);
 
   const defaultName = `${shanghaiLocalDateFromInstant(
     new Date().toISOString()
@@ -124,7 +125,8 @@ export function NewProjectForm({ players }: { players: Player[] }) {
   }
 
   const trimmedName = name.trim();
-  const canSubmit = selected.size >= 4 && myId !== null && !loading;
+  const isGuo = mode === "guo";
+  const canSubmit = (isGuo ? selected.size === 8 : selected.size >= 4) && myId !== null && !loading;
 
   async function handleSubmit() {
     if (!canSubmit) return;
@@ -162,8 +164,8 @@ export function NewProjectForm({ players }: { players: Player[] }) {
         body: JSON.stringify({
           name: trimmedName || undefined,
           playerIds: Array.from(selected).map(String),
-          matches,
-          avoidPlayedRematches: avoidRematch,
+          matches: isGuo ? 6 : matches,
+          ...(isGuo ? { mode: "guo" } : { avoidPlayedRematches: avoidRematch }),
           actorId: String(myId),
           requestId: rid,
           ...(seedValue !== null ? { seed: seedValue } : {}),
@@ -197,6 +199,22 @@ export function NewProjectForm({ players }: { players: Player[] }) {
           {legacyHint}
         </div>
       )}
+
+      <fieldset className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+        <legend className="sr-only">分配方法</legend>
+        <h2 className="mb-3 font-semibold text-card-foreground">分配方法</h2>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {([
+            ["balanced", "普通配对", "灵活人数与场次，兼顾公平和对阵多样"],
+            ["guo", "郭老师分配方法", "8 人双组循环，按每轮战绩换组"],
+          ] as const).map(([value, title, description]) => (
+            <label key={value} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors ${mode === value ? "border-primary bg-primary/5" : "border-border hover:bg-muted"}`}>
+              <input type="radio" name="allocation-mode" value={value} checked={mode === value} onChange={() => setMode(value)} className="mt-1 size-4 shrink-0 accent-primary" />
+              <span><span className="block text-sm font-bold text-card-foreground">{title}</span><span className="mt-1 block text-xs leading-relaxed text-muted-foreground">{description}</span></span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
 
       <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
         <div className="mb-3 flex items-center justify-between">
@@ -287,11 +305,17 @@ export function NewProjectForm({ players }: { players: Player[] }) {
           )}
         </div>
         <p className="mt-3 text-xs text-muted-foreground">
-          已选 {selected.size} 人{selected.size < 4 && "（至少 4 人）"}
+          已选 {selected.size} 人{isGuo ? "（需要恰好 8 人）" : selected.size < 4 && "（至少 4 人）"}
         </p>
       </div>
 
-      <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+      {isGuo ? (
+        <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 text-sm leading-relaxed">
+          <h2 className="font-bold text-card-foreground">两组轮换，每轮 6 场</h2>
+          <p className="mt-2 text-xs text-muted-foreground">首轮按实力分成 A、B 两组，各 4 人。每组打 3 场、搭档全轮换；六场比分录齐后，按胜场、净胜分和超预期分决定下一轮分组。</p>
+          <p className="mt-2 text-xs text-muted-foreground">第 2 轮正常升降，第 3 轮交叉交流：上轮 A 组前二与 B 组后二同场，其余四人另一场。打完 3 轮后可再开第 4 轮，恢复正常升降。</p>
+        </div>
+      ) : <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
         <h2 className="mb-4 font-semibold text-card-foreground">接下来安排几场</h2>
         <div className="flex items-center gap-4">
           <button
@@ -323,7 +347,7 @@ export function NewProjectForm({ players }: { players: Player[] }) {
             +
           </button>
         </div>
-      </div>
+      </div>}
 
       <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
         <h2 className="mb-3 font-semibold text-card-foreground">项目名称（可选）</h2>
@@ -337,7 +361,7 @@ export function NewProjectForm({ players }: { players: Player[] }) {
         />
       </div>
 
-      <label className="flex items-start gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm">
+      {!isGuo && <label className="flex items-start gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm">
         <input
           type="checkbox"
           checked={avoidRematch}
@@ -352,7 +376,7 @@ export function NewProjectForm({ players }: { players: Player[] }) {
             优先安排本项目里没打过的对阵，必要时仍可重复
           </span>
         </span>
-      </label>
+      </label>}
 
       <div className="rounded-2xl border border-border bg-card shadow-sm">
         <button

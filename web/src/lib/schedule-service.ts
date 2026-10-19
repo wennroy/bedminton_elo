@@ -28,6 +28,7 @@ import {
   type SchedulingResult,
 } from "./scheduling/types";
 import { solveScheduling, SEARCH_BUDGET } from "./scheduling/search";
+import { createGuoDraw, createGuoGroups, createGuoSchedule, isGuoSnapshot, nextGuoGroups, type GuoSnapshot } from "./scheduling/guo";
 
 /**
  * 排阵项目的服务层：参数/身份校验、评分快照一次捕获、引擎求解编排、
@@ -398,6 +399,7 @@ export interface CreateProjectServiceResult {
 }
 
 export function createProjectService(params: {
+  mode?: unknown;
   name?: unknown;
   playerIds?: unknown;
   matches?: unknown;
@@ -408,6 +410,8 @@ export function createProjectService(params: {
   requestId?: unknown;
   db?: Database.Database;
 }): CreateProjectServiceResult {
+  if (params.mode === "guo") return createGuoProjectService(params);
+  if (params.mode !== undefined && params.mode !== null) badRequest('mode 必须是 "guo" 或省略');
   const conn = resolveDb(params.db);
   const name = parseProjectName(params.name) ?? `${shanghaiToday()} 配对`;
   const playerIds = sortPlayerIds(
@@ -487,6 +491,87 @@ export function createProjectService(params: {
   };
 }
 
+/** Guo request hashes describe client intent, excluding generated seeds and rating state. */
+function createGuoProjectService(params: Parameters<typeof createProjectService>[0]): CreateProjectServiceResult {
+  const conn = resolveDb(params.db);
+  const playerIds = sortPlayerIds(requireUniquePlayerIds(params.playerIds, "playerIds"));
+  if (playerIds.length !== 8) badRequest("郭老师方法仅支持 8 名球员");
+  if (params.matches !== undefined && params.matches !== 6) badRequest("郭老师方法每轮固定 6 场");
+  const requestedName = parseProjectName(params.name);
+  const requestedModel = parseModelOption(params.model);
+  const explicitSeed = params.seed === undefined || params.seed === null ? null : requireInt(params.seed, "seed", 0, MAX_SEED);
+  const actorId = requireActorId(params.actorId);
+  const requestId = requireUuid(params.requestId, "requestId");
+  const payloadHash = hashPayload({ v: 1, mode: "guo", name: requestedName, model: requestedModel, playerIds, actorId, seed: explicitSeed });
+  assertPlayerExists(conn, actorId);
+  const existing = conn.prepare(`SELECT id, create_payload_hash AS hash FROM schedule_projects WHERE create_request_id = ?`).get(requestId) as { id: number; hash: string } | undefined;
+  if (existing) {
+    if (existing.hash !== payloadHash) throw new ScheduleProjectError("idempotency_conflict", "requestId 已用于不同创建内容");
+    const project = getProject(existing.id, conn);
+    return { project, names: buildNamesMap(conn, project), replayed: true };
+  }
+  assertPlayersExist(conn, playerIds);
+  const model = requestedModel ?? readRatingConfig(conn)?.activeModel ?? "legacy";
+  const handle = captureWinProbability(model, conn, new Date().toISOString());
+  const seed = explicitSeed ?? resolveSeed(undefined);
+  const drawOrder = createGuoDraw(playerIds, seed);
+  const ratings = Object.fromEntries(playerIds.map((id) => {
+    const rating = handle.playerRatings[id];
+    return [id, typeof rating === "number" ? rating : (rating as {r:number}).r];
+  }));
+  const {groupA, groupB} = createGuoGroups(playerIds, ratings, drawOrder);
+  const schedule = createGuoSchedule(groupA, groupB);
+  const snapshot: GuoSnapshot = { mode: "guo", roundNo: 1, kind: "initial", groupA, groupB, drawOrder, seed, sourceStandings: null, schedule };
+  const created = createProject({
+    name: requestedName ?? `${shanghaiToday()} 郭老师分配`, model, createdBy: actorId, requestId, payloadHash, playerIds,
+    engineInput: buildGenerationSnapshot({ ...snapshot }, handle, model, playerIds),
+    fixtureWinRates: schedule.map((m) => handle.winProbability(m.a1, m.a2, m.b1, m.b2)),
+  }, { schedule, metrics: { mode: "guo", roundNo: 1 } }, conn);
+  const project = getProject(created.id, conn);
+  return { project, names: buildNamesMap(conn, project), replayed: created.replayed };
+}
+
+function advanceGuoProjectService(
+  params: Parameters<typeof regenerateProjectService>[0], conn: Database.Database,
+  detail: ProjectDetail, actorId: string, requestId: string, expectedRevision: number
+): RegenerateServiceResult {
+  for (const field of ["playerIds", "matches", "seed", "avoidPlayedRematches"] as const) {
+    if (params[field] !== undefined) badRequest("郭老师方法固定八人及每轮六场，请直接开启下一轮");
+  }
+  const projectId = detail.id;
+  const payloadHash = hashPayload({ v: 1, mode: "guo", projectId, actorId, expectedRevision });
+  const existing = conn.prepare(`SELECT id, payload_hash AS hash FROM schedule_generations WHERE project_id = ? AND request_id = ?`).get(projectId, requestId) as { id: number; hash: string } | undefined;
+  if (existing) {
+    if (existing.hash !== payloadHash) throw new ScheduleProjectError("idempotency_conflict", "requestId 已用于不同续轮内容");
+    return { project: detail, names: buildNamesMap(conn, detail), generationId: existing.id,
+      fixtures: [...detail.fixtures, ...detail.superseded].filter((f) => f.generationId === existing.id),
+      supersededCount: 0, joinedPlayers: [], leftPlayers: [], replayed: true };
+  }
+  if (detail.revision !== expectedRevision) throw new ScheduleProjectError("revision_conflict", "项目已变化，请刷新后开启下一轮", detail.revision);
+  const state = detail.guo!;
+  if (!state.canAdvance || !state.nextRoundKind) throw new ScheduleServiceError(409, "state_conflict", "本轮六场需全部录入比分后才能开启下一轮，最多四轮");
+  const previous = state.rounds[state.rounds.length - 1];
+  const previousInput = detail.latestGeneration!.input;
+  if (!isGuoSnapshot(previousInput)) throw new ScheduleServiceError(409, "state_conflict", "轮次快照缺失");
+  const {groupA, groupB} = nextGuoGroups(previous.standingsA, previous.standingsB, state.nextRoundKind);
+  const schedule = createGuoSchedule(groupA, groupB);
+  const model = detail.model as RatingModel;
+  const handle = captureWinProbability(model, conn, new Date().toISOString());
+  const playerIds = detail.members.map((m) => m.playerId);
+  const snapshot: GuoSnapshot = {
+    mode: "guo", roundNo: previous.roundNo + 1, kind: state.nextRoundKind, groupA, groupB,
+    drawOrder: previousInput.drawOrder, seed: previousInput.seed,
+    sourceStandings: { groupA: previous.standingsA, groupB: previous.standingsB }, schedule,
+  };
+  const result = regenerate({ projectId, expectedRevision, requestId, payloadHash, actorId, newPlayerIds: playerIds,
+    engineInput: buildGenerationSnapshot({ ...snapshot }, handle, model, playerIds),
+    engineResult: { schedule, metrics: { mode: "guo", roundNo: snapshot.roundNo } },
+    fixtureWinRates: schedule.map((m) => handle.winProbability(m.a1, m.a2, m.b1, m.b2)),
+  }, conn);
+  const project = getProject(projectId, conn);
+  return { ...result, project, names: buildNamesMap(conn, project) };
+}
+
 /** input_json 快照不含函数回调（JSON.stringify 也会丢，显式剔除更干净）。 */
 function stripCallback(input: SchedulingInput): Record<string, unknown> {
   const rest: Record<string, unknown> = { ...input };
@@ -520,7 +605,7 @@ function buildGenerationSnapshot(
       config: handle.ratingConfig,
       playerRatings: selected,
     },
-    budget: SEARCH_BUDGET,
+    ...(base.mode === "guo" ? {} : { budget: SEARCH_BUDGET }),
   };
 }
 
@@ -570,6 +655,9 @@ export function regenerateProjectService(params: {
   );
   const requestId = requireUuid(params.requestId, "requestId");
   const actorId = requireActorId(params.actorId);
+  assertPlayerExists(conn, actorId);
+  const current = getProject(projectId, conn);
+  if (current.guo) return advanceGuoProjectService(params, conn, current, actorId, requestId, expectedRevision);
   const playerIds = sortPlayerIds(
     requireUniquePlayerIds(params.playerIds, "playerIds")
   );
@@ -1048,8 +1136,8 @@ export interface MergePlayerResult {
  * 3) 两 ID 在同一项目均有成员记录 → 拒绝（说明两名球员都有项目参与记录）；
  * 无冲突时更新项目成员行、fixture 槽位、generations.created_by、
  * fixtures.marked_by、projects.created_by 及 matches 既有引用，
- * 受影响项目 revision++ / updated_at；旧 generation 输入快照（input_json）
- * 保持不可变。任一步失败整体回滚，禁止部分迁移。
+ * 受影响项目 revision++ / updated_at；普通 generation 输入保持不可变，
+ * 郭老师快照仅迁移球员身份引用，保留历史排名、抽签与评分数值。任一步失败整体回滚。
  */
 export function mergePlayerWithScheduleRefs(
   fromId: number,
@@ -1186,6 +1274,28 @@ export function mergePlayerWithScheduleRefs(
     conn
       .prepare(`UPDATE schedule_projects SET created_by = ? WHERE created_by = ?`)
       .run(toText, fromText);
+
+    // Guo rounds are read back from their snapshots, so identity references must
+    // follow a merge. Only identifiers change; historical numerical facts stay fixed.
+    const snapshots = conn.prepare(`SELECT id, project_id AS projectId, input_json AS inputJson FROM schedule_generations`).all() as {id: number; projectId: number; inputJson: string}[];
+    const updateSnapshot = conn.prepare(`UPDATE schedule_generations SET input_json = ? WHERE id = ?`);
+    for (const row of snapshots) {
+      const input = JSON.parse(row.inputJson) as unknown;
+      if (!isGuoSnapshot(input) || ![...input.groupA, ...input.groupB].includes(fromText)) continue;
+      const replaceId = (id: string) => id === fromText ? toText : id;
+      input.groupA = input.groupA.map(replaceId);
+      input.groupB = input.groupB.map(replaceId);
+      input.drawOrder[toText] = input.drawOrder[fromText];
+      delete input.drawOrder[fromText];
+      input.schedule = input.schedule.map((m) => ({a1: replaceId(m.a1), a2: replaceId(m.a2), b1: replaceId(m.b1), b2: replaceId(m.b2)}));
+      if (input.sourceStandings) {
+        for (const standing of [...input.sourceStandings.groupA, ...input.sourceStandings.groupB]) standing.playerId = replaceId(standing.playerId);
+      }
+      const rating = (input as GuoSnapshot & {rating?: {playerRatings?: Record<string, unknown>}}).rating?.playerRatings;
+      if (rating && fromText in rating) { rating[toText] = rating[fromText]; delete rating[fromText]; }
+      updateSnapshot.run(JSON.stringify(input), row.id);
+      affected.add(row.projectId);
+    }
 
     mergePlayers(fromId, toId, conn);
 

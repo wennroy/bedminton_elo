@@ -185,4 +185,38 @@ describe("NewProjectForm（新建配对项目）", () => {
     const matchesInput = screen.getByLabelText("场次数") as HTMLInputElement;
     expect(matchesInput.value).toBe("6");
   });
+
+  it("郭老师模式只允许恰好 8 人，轮次取代自由场次数", () => {
+    const players = Array.from({ length: 9 }, (_, i) => ({ id: i + 1, name: `球员${i + 1}` }));
+    render(<NewProjectForm players={players} />);
+    fireEvent.click(screen.getByRole("radio", { name: /郭老师分配方法/ }));
+    selectPlayers(players.slice(0, 7).map((p) => p.name));
+    const submit = screen.getByRole("button", { name: /创建配对项目/ });
+    expect(submit).toHaveProperty("disabled", true);
+    expect(screen.queryByLabelText("场次数")).toBeNull();
+    expect(screen.getByText(/每轮 6 场/)).toBeTruthy();
+    selectPlayers([players[7].name]);
+    expect(submit).toHaveProperty("disabled", false);
+    selectPlayers([players[8].name]);
+    expect(submit).toHaveProperty("disabled", true);
+  });
+
+  it("郭老师模式提交模式和 8 人名单，切回普通配对保留原场次", async () => {
+    const players = Array.from({ length: 8 }, (_, i) => ({ id: i + 1, name: `球员${i + 1}` }));
+    const fetchMock = vi.fn().mockResolvedValue(createdResponse(9));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<NewProjectForm players={players} />);
+    fireEvent.change(screen.getByLabelText("场次数"), { target: { value: "9" } });
+    fireEvent.click(screen.getByRole("radio", { name: /郭老师分配方法/ }));
+    selectPlayers(players.map((p) => p.name));
+    fireEvent.click(screen.getByRole("radio", { name: /普通配对/ }));
+    expect(screen.getByLabelText("场次数")).toHaveProperty("value", "9");
+    fireEvent.click(screen.getByRole("radio", { name: /郭老师分配方法/ }));
+    fireEvent.click(screen.getByRole("button", { name: /创建配对项目/ }));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/schedule/9"));
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1].body));
+    expect(body.mode).toBe("guo");
+    expect(body.playerIds).toHaveLength(8);
+    expect(body.matches).toBe(6);
+  });
 });

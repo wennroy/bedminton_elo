@@ -1,6 +1,10 @@
 import type Database from "better-sqlite3";
 import { getDb } from "./db";
-import type { SchedulingResult } from "./scheduling/types";
+import type { ScheduledMatch } from "./scheduling/types";
+import { deriveGuoState, isGuoSnapshot, createGuoSchedule, nextGuoGroups, type GuoProjectState } from "./scheduling/guo";
+
+/** Storage accepts any scheduling engine without pretending they share algorithm versions. */
+export interface ScheduleGenerationResult { schedule: ScheduledMatch[]; metrics: unknown; }
 
 /**
  * 排阵项目的存储层。计算逻辑（搜索/评分/目标函数）由调用方注入，
@@ -96,6 +100,7 @@ export interface ProjectMember {
 }
 
 export interface ProjectSummary {
+  mode?: "guo";
   id: number;
   name: string;
   model: string;
@@ -110,6 +115,7 @@ export interface ProjectSummary {
 }
 
 export interface ProjectDetail {
+  guo?: GuoProjectState;
   id: number;
   name: string;
   model: string;
@@ -212,11 +218,11 @@ function requireIsoDate(value: unknown, field: string): string {
   return value;
 }
 
-function validateEngineResult(result: SchedulingResult): void {
+function validateEngineResult(result: ScheduleGenerationResult): void {
   if (result === null || typeof result !== "object") {
     throw new ScheduleProjectError(
       "validation_error",
-      "engineResult 必须是 SchedulingResult 对象"
+      "engineResult 必须是 ScheduleGenerationResult 对象"
     );
   }
   if (!Array.isArray(result.schedule)) {
@@ -427,7 +433,7 @@ export interface CreateProjectResult {
 
 export function createProject(
   input: CreateProjectInput,
-  engineResult?: SchedulingResult,
+  engineResult?: ScheduleGenerationResult,
   db?: Database.Database
 ): CreateProjectResult {
   const conn = resolveDb(db);
@@ -517,7 +523,7 @@ export interface RegenerateInput {
   /** 引擎输入快照（JSON 可序列化）。 */
   engineInput: unknown;
   /** 引擎结果；matches=0 时为 null（只保存名单变更、清空未打）。 */
-  engineResult: SchedulingResult | null;
+  engineResult: ScheduleGenerationResult | null;
   /** 逐场生成胜率（与 engineResult.schedule 同序，取值 [0,1] 或 null）。 */
   fixtureWinRates?: (number | null)[];
   actorId: string;
@@ -609,6 +615,33 @@ export function regenerate(
         `项目 revision 已变化：期望 ${expectedRevision}，当前 ${project.revision}`,
         project.revision
       );
+    }
+
+    // Guo rounds must remain sequential and cannot use ordinary regeneration to
+    // bypass score completion, locked roster, or the four-round cap.
+    const detail = getProject(projectId, conn);
+    if (detail.guo) {
+      const state = detail.guo;
+      const previous = state.rounds[state.rounds.length - 1];
+      const snapshot = input.engineInput;
+      const previousSnapshot = detail.latestGeneration?.input;
+      const expectedGroups = state.nextRoundKind
+        ? nextGuoGroups(previous.standingsA, previous.standingsB, state.nextRoundKind) : null;
+      const expectedSchedule = expectedGroups ? createGuoSchedule(expectedGroups.groupA, expectedGroups.groupB) : null;
+      const sameRoster = [...newPlayerIds].sort().join(",") === detail.members.map((m) => m.playerId).sort().join(",");
+      if (!state.canAdvance || !sameRoster || !isGuoSnapshot(snapshot) ||
+          snapshot.roundNo !== previous.roundNo + 1 || snapshot.kind !== state.nextRoundKind ||
+          JSON.stringify([snapshot.groupA, snapshot.groupB]) !== JSON.stringify([expectedGroups?.groupA, expectedGroups?.groupB]) ||
+          JSON.stringify(input.engineResult?.schedule) !== JSON.stringify(expectedSchedule) ||
+          JSON.stringify(snapshot.schedule) !== JSON.stringify(expectedSchedule) ||
+          !isGuoSnapshot(previousSnapshot) || snapshot.seed !== previousSnapshot.seed ||
+          JSON.stringify(snapshot.drawOrder) !== JSON.stringify(previousSnapshot.drawOrder) ||
+          JSON.stringify(snapshot.sourceStandings) !== JSON.stringify({ groupA: previous.standingsA, groupB: previous.standingsB }) ||
+          input.fixtureWinRates?.length !== 6 || input.fixtureWinRates.some((rate) => rate === null)) {
+        throw new ScheduleProjectError("state_conflict", "郭老师方法需保留八人名单，完成本轮六场录分后按规则开启下一轮（最多四轮）");
+      }
+    } else if (isGuoSnapshot(input.engineInput)) {
+      throw new ScheduleProjectError("state_conflict", "普通排阵项目不能切换为郭老师方法");
     }
 
     const newNums = newPlayerIds.map(Number);
@@ -727,7 +760,7 @@ function insertGeneration(
     payloadHash: string;
     sourceRevision: number;
     engineInput: unknown;
-    engineResult: SchedulingResult | null;
+    engineResult: ScheduleGenerationResult | null;
     fixtureWinRates?: (number | null)[];
     createdBy: string;
   }
@@ -851,7 +884,9 @@ export function listProjects(
       playedUnscoredCount: number;
       recordedCount: number;
     };
-    return { ...row, ...counts };
+    const first = conn.prepare(`SELECT input_json AS input FROM schedule_generations WHERE project_id = ? ORDER BY id LIMIT 1`).get(row.id) as {input: string} | undefined;
+    const mode = first && isGuoSnapshot(JSON.parse(first.input)) ? "guo" as const : undefined;
+    return { ...row, ...counts, ...(mode ? { mode } : {}) };
   });
 
   return {
@@ -938,8 +973,12 @@ export function getProject(
       }
     | undefined;
 
+  const generations = conn.prepare(`SELECT id, input_json AS inputJson FROM schedule_generations WHERE project_id = ? ORDER BY id ASC`).all(id) as { id: number; inputJson: string }[];
+  const guo = deriveGuoState(generations.map((g) => ({ id: g.id, input: JSON.parse(g.inputJson) as unknown })), [...fixtures, ...superseded]);
+
   return {
     ...project,
+    ...(guo ? { guo } : {}),
     members,
     fixtures,
     superseded,

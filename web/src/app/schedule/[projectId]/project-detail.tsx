@@ -20,6 +20,7 @@ import {
   type Fixture,
   type ProjectDetail,
 } from "../types";
+import { GuoProjectDetail } from "./guo-project-detail";
 
 interface DirectoryPlayer {
   id: number;
@@ -59,6 +60,18 @@ function CurrentPredictLink({ fixture }: { fixture: Fixture }) {
 }
 
 export function ProjectDetailClient({
+  initialProject,
+  initialNames,
+  directory,
+}: ProjectDetailClientProps) {
+  return initialProject.guo ? (
+    <GuoProjectDetail initialProject={initialProject} initialNames={initialNames} />
+  ) : (
+    <StandardProjectDetail initialProject={initialProject} initialNames={initialNames} directory={directory} />
+  );
+}
+
+function StandardProjectDetail({
   initialProject,
   initialNames,
   directory,
